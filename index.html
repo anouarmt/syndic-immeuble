@@ -1,0 +1,1295 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Registre du Syndic</title>
+<meta name="description" content="Gestion de syndic d'immeuble : étages, lots, cotisations, dépenses, impayés et états imprimables.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 34 40%22%3E%3Crect x=%223%22 y=%224%22 width=%2228%22 height=%2235%22 rx=%222%22 fill=%22%231D58A6%22/%3E%3Crect width=%2234%22 height=%225%22 y=%221%22 rx=%221.5%22 fill=%22%232A3442%22/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+[hidden]{display:none!important}
+html{height:100%}
+body{margin:0}
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+img{max-width:100%}
+/* Layout : barre latérale de navigation + espace de travail ; la vue Immeuble dessine la façade étage par étage */
+:root{
+  --bg:#ECEFF2; --surface:#FFFFFF; --surface-2:#F5F7F9; --line:#D3D9E0; --line-2:#E3E7EC;
+  --ink:#18212C; --muted:#5B6674; --accent:#1D58A6; --accent-soft:#E2EBF7; --accent-ink:#FFFFFF;
+  --ok:#1C7A4B; --ok-bg:#E0F2E8; --warn:#93600A; --warn-bg:#FAEFD6; --bad:#AE2A21; --bad-bg:#FAE3E0;
+  --exp:#C27A1E; --roof:#2A3442; --roof-ink:#EEF2F6; --ground:#C9D0D8; --shadow:0 1px 2px rgba(20,30,45,.06),0 4px 14px rgba(20,30,45,.06);
+  --f-display:"Bricolage Grotesque","Segoe UI",system-ui,sans-serif;
+  --f-body:"IBM Plex Sans","Segoe UI",system-ui,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#11151A; --surface:#1A2027; --surface-2:#20272F; --line:#2F3844; --line-2:#262E38;
+  --ink:#E5E9EE; --muted:#97A2AF; --accent:#6FA3EA; --accent-soft:#1E2E44; --accent-ink:#0E1620;
+  --ok:#5DC08B; --ok-bg:#163126; --warn:#E2AE52; --warn-bg:#352A12; --bad:#F27E73; --bad-bg:#3B1C1A;
+  --exp:#E3A456; --roof:#0B0E12; --roof-ink:#D9DEE4; --ground:#2A323C; --shadow:0 1px 2px rgba(0,0,0,.3),0 4px 14px rgba(0,0,0,.25); color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#11151A; --surface:#1A2027; --surface-2:#20272F; --line:#2F3844; --line-2:#262E38;
+  --ink:#E5E9EE; --muted:#97A2AF; --accent:#6FA3EA; --accent-soft:#1E2E44; --accent-ink:#0E1620;
+  --ok:#5DC08B; --ok-bg:#163126; --warn:#E2AE52; --warn-bg:#352A12; --bad:#F27E73; --bad-bg:#3B1C1A;
+  --exp:#E3A456; --roof:#0B0E12; --roof-ink:#D9DEE4; --ground:#2A323C; --shadow:0 1px 2px rgba(0,0,0,.3),0 4px 14px rgba(0,0,0,.25); color-scheme:dark}
+
+*{box-sizing:border-box}
+html,body{background:var(--bg);color:var(--ink)}
+body{font-family:var(--f-body);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+h1,h2,h3{font-family:var(--f-display);font-weight:700;margin:0;text-wrap:balance;letter-spacing:-.01em}
+h1{font-size:1.35rem} h2{font-size:1.2rem} h3{font-size:1rem}
+.num,.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.eyebrow{font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600}
+.muted{color:var(--muted)}
+
+/* ---------- shell ---------- */
+.app{display:grid;grid-template-columns:232px minmax(0,1fr);min-height:100%}
+.side{background:var(--surface);border-right:1px solid var(--line);padding-block:20px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:16px;display:flex;flex-direction:column;gap:20px;position:sticky;top:0;height:100vh;overflow:auto}
+.brand{display:flex;gap:10px;align-items:center}
+.brand-mark{width:34px;height:40px;flex:none}
+.brand-name{font-family:var(--f-display);font-weight:700;font-size:1.02rem;line-height:1.15}
+.brand-sub{font-size:.75rem;color:var(--muted)}
+.nav{display:flex;flex-direction:column;gap:2px}
+.nav button{display:flex;align-items:center;gap:10px;width:100%;text-align:left;border:0;background:none;padding:9px 10px;border-radius:7px;cursor:pointer;color:var(--muted);font-weight:500}
+.nav button svg{width:18px;height:18px;flex:none}
+.nav button:hover{background:var(--surface-2);color:var(--ink)}
+.nav button[aria-current="page"]{background:var(--accent-soft);color:var(--accent)}
+.side-foot{margin-top:auto;display:flex;flex-direction:column;gap:8px}
+.caisse{border:1px solid var(--line);border-radius:8px;padding:10px 12px;background:var(--surface-2)}
+.caisse .num{font-size:1.05rem;font-weight:500}
+.mode-pill{font-size:.72rem;color:var(--muted)}
+
+.main{min-width:0;padding-block:22px 48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.main-in{max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+.topbar{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px}
+.topbar .actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+
+/* ---------- controls ---------- */
+.btn{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--surface);padding:7px 12px;border-radius:7px;cursor:pointer;font-weight:500;white-space:nowrap}
+.btn:hover{border-color:var(--muted)}
+.btn svg{width:16px;height:16px}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.primary:hover{filter:brightness(1.08)}
+.btn.ghost{border-color:transparent;background:none}
+.btn.ghost:hover{background:var(--surface-2)}
+.btn.danger{color:var(--bad)}
+.btn.sm{padding:4px 9px;font-size:.82rem}
+.btn[disabled]{opacity:.45;cursor:not-allowed}
+.icon-btn{border:0;background:none;padding:5px;border-radius:6px;cursor:pointer;color:var(--muted);display:inline-flex}
+.icon-btn:hover{background:var(--surface-2);color:var(--ink)}
+.icon-btn svg{width:16px;height:16px}
+.field{display:flex;flex-direction:column;gap:4px;min-width:0}
+.field label{font-size:.78rem;font-weight:600;color:var(--muted)}
+.input,select.input,textarea.input{border:1px solid var(--line);background:var(--surface);border-radius:7px;padding:8px 10px;width:100%;min-width:0}
+textarea.input{resize:vertical;min-height:64px}
+.input:focus{border-color:var(--accent);outline:none;box-shadow:0 0 0 3px var(--accent-soft)}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:7px;overflow:hidden;background:var(--surface)}
+.seg button{border:0;background:none;padding:6px 11px;cursor:pointer;color:var(--muted);font-weight:500}
+.seg button[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent)}
+.year-sel{display:flex;align-items:center;gap:4px;border:1px solid var(--line);border-radius:7px;background:var(--surface);padding:2px}
+.year-sel span{font-family:var(--f-mono);min-width:3.2em;text-align:center;font-weight:500}
+
+/* ---------- panels ---------- */
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:10px}
+.panel-h{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--line-2)}
+.panel-b{padding:16px}
+.grid2{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:18px}
+.kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.kpi{background:var(--surface);padding:14px 16px;display:flex;flex-direction:column;gap:4px;min-width:0}
+.kpi .v{font-family:var(--f-mono);font-size:1.32rem;font-weight:500;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kpi .s{font-size:.78rem;color:var(--muted)}
+.kpi.neg .v{color:var(--bad)} .kpi.pos .v{color:var(--ok)}
+.meter{height:6px;border-radius:3px;background:var(--line-2);overflow:hidden}
+.meter i{display:block;height:100%;background:var(--ok);border-radius:3px}
+
+.chip{display:inline-flex;align-items:center;gap:5px;font-size:.74rem;font-weight:600;padding:2px 8px;border-radius:999px;white-space:nowrap}
+.chip::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.chip.ok{color:var(--ok);background:var(--ok-bg)}
+.chip.warn{color:var(--warn);background:var(--warn-bg)}
+.chip.bad{color:var(--bad);background:var(--bad-bg)}
+.chip.neutral{color:var(--muted);background:var(--surface-2)}
+.tag{display:inline-block;font-size:.72rem;padding:1px 7px;border-radius:4px;background:var(--surface-2);border:1px solid var(--line-2);color:var(--muted);white-space:nowrap}
+.ex-badge{font-size:.66rem;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--warn);border:1px dashed var(--warn);border-radius:4px;padding:0 5px}
+
+/* ---------- tables ---------- */
+.tbl-wrap{overflow-x:auto}
+table.tbl{width:100%;border-collapse:collapse;font-size:.88rem}
+.tbl th{text-align:left;font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600;padding:9px 12px;border-bottom:1px solid var(--line);white-space:nowrap;background:var(--surface)}
+.tbl td{padding:9px 12px;border-bottom:1px solid var(--line-2);vertical-align:middle}
+.tbl tr:last-child td{border-bottom:0}
+.tbl td.r,.tbl th.r{text-align:right}
+.tbl tbody tr:hover td{background:var(--surface-2)}
+.tbl tfoot td{font-weight:600;border-top:1px solid var(--line);background:var(--surface-2)}
+.row-actions{display:flex;gap:2px;justify-content:flex-end}
+.link{background:none;border:0;padding:0;color:var(--accent);cursor:pointer;font-weight:500;text-align:left}
+.link:hover{text-decoration:underline}
+.filters{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.filters .input{width:auto;min-width:130px}
+.filters .search{flex:1 1 200px}
+.empty{padding:36px 16px;text-align:center;color:var(--muted);display:flex;flex-direction:column;align-items:center;gap:10px}
+.empty h3{color:var(--ink)}
+
+/* ---------- chart ---------- */
+.chart svg{width:100%;height:auto;display:block}
+.chart text{fill:var(--muted);font-family:var(--f-mono);font-size:10px}
+.legend{display:flex;gap:16px;font-size:.8rem;color:var(--muted);flex-wrap:wrap}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+.hbar{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:3px 10px;align-items:center;font-size:.84rem}
+.hbar .bar{grid-column:1/-1;height:6px;background:var(--line-2);border-radius:3px;overflow:hidden;margin-bottom:8px}
+.hbar .bar i{display:block;height:100%;background:var(--exp)}
+
+/* ---------- facade ---------- */
+.facade{display:flex;flex-direction:column;max-width:100%}
+.roof{background:var(--roof);color:var(--roof-ink);border-radius:10px 10px 0 0;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;position:relative}
+.roof::before{content:"";position:absolute;left:24px;right:24px;top:-7px;height:7px;background:var(--roof);border-radius:4px 4px 0 0;opacity:.75}
+.roof h2{font-size:1.05rem}
+.roof .sub{font-size:.78rem;opacity:.75}
+.floor{display:grid;grid-template-columns:112px minmax(0,1fr);border-left:1px solid var(--line);border-right:1px solid var(--line);border-bottom:1px solid var(--line);background:var(--surface)}
+.floor-tag{padding:12px;border-right:1px dashed var(--line);display:flex;flex-direction:column;gap:6px;background:var(--surface-2)}
+.floor-tag .nm{font-family:var(--f-display);font-weight:700;font-size:.95rem}
+.floor-tag .ft{display:flex;gap:2px}
+.units{padding:12px;display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:10px;align-content:start}
+.unit{border:1px solid var(--line);border-radius:4px;background:var(--surface);padding:10px 11px;display:flex;flex-direction:column;gap:6px;cursor:pointer;text-align:left;min-width:0;position:relative}
+.unit:hover{border-color:var(--accent);box-shadow:var(--shadow)}
+.unit .top{display:flex;justify-content:space-between;align-items:baseline;gap:6px}
+.unit .no{font-family:var(--f-mono);font-weight:500;font-size:1rem}
+.unit .owner{font-size:.84rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.unit .due{font-family:var(--f-mono);font-size:.78rem}
+.unit.warn{background:linear-gradient(var(--warn),var(--warn)) top/100% 4px no-repeat,var(--surface)}
+.unit.bad{background:linear-gradient(var(--bad),var(--bad)) top/100% 4px no-repeat,var(--surface)}
+.unit.ok{background:linear-gradient(var(--ok),var(--ok)) top/100% 4px no-repeat,var(--surface)}
+.unit-add{border:1px dashed var(--line);border-radius:4px;background:none;color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;min-height:92px;font-weight:500}
+.unit-add:hover{color:var(--accent);border-color:var(--accent)}
+.ground{height:14px;background:repeating-linear-gradient(135deg,var(--ground) 0 6px,transparent 6px 12px);border:1px solid var(--line);border-top:0;border-radius:0 0 10px 10px}
+.legend-status{display:flex;gap:10px;flex-wrap:wrap}
+
+/* ---------- grille de suivi ---------- */
+table.grid{border-collapse:separate;border-spacing:0;font-size:.82rem;min-width:100%}
+.grid th,.grid td{padding:0;border-bottom:1px solid var(--line-2)}
+.grid th{font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600;padding:8px 4px;text-align:center;background:var(--surface);position:sticky;top:0}
+.grid .stick{position:sticky;left:0;background:var(--surface);z-index:1;text-align:left;padding:7px 12px;min-width:170px;border-right:1px solid var(--line)}
+.grid th.stick{z-index:2}
+.grid .fl td{background:var(--surface-2);font-weight:600;font-size:.74rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);padding:6px 12px}
+.grid .fl td.stick{background:var(--surface-2)}
+.cell{width:100%;min-width:46px;height:34px;border:0;background:none;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}
+.cell span{width:30px;height:22px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:.72rem;font-family:var(--f-mono)}
+.cell.paid span{background:var(--ok-bg);color:var(--ok)}
+.cell.unpaid span{background:var(--bad-bg);color:var(--bad);font-weight:600}
+.cell.future span{border:1px dashed var(--line);color:var(--muted)}
+.cell.pre span{color:var(--line)}
+.cell:hover span{outline:2px solid var(--accent);outline-offset:1px}
+.grid td.tot{padding:7px 10px;text-align:right;font-family:var(--f-mono);white-space:nowrap}
+.grid tfoot td{background:var(--surface-2);font-family:var(--f-mono);font-size:.74rem;text-align:center;padding:7px 4px;border-top:1px solid var(--line)}
+.grid tfoot td.stick{background:var(--surface-2);font-family:var(--f-body);font-weight:600}
+
+/* ---------- modal ---------- */
+.overlay{position:fixed;inset:0;background:rgba(10,15,22,.45);z-index:50;display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding-block:max(28px,env(safe-area-inset-top,0px)) 28px;padding-left:max(12px,env(safe-area-inset-left,0px));padding-right:max(12px,env(safe-area-inset-right,0px))}
+.sheet{background:var(--surface);border:1px solid var(--line);border-radius:12px;width:100%;max-width:620px;box-shadow:0 20px 50px rgba(0,0,0,.25);display:flex;flex-direction:column}
+.sheet.wide{max-width:820px}
+.sheet-h{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:16px 18px;border-bottom:1px solid var(--line-2)}
+.sheet-b{padding:18px;display:flex;flex-direction:column;gap:14px}
+.sheet-f{display:flex;justify-content:flex-end;gap:8px;padding:14px 18px;border-top:1px solid var(--line-2);flex-wrap:wrap}
+.form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.form-grid .full{grid-column:1/-1}
+.months{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px}
+.mchip{position:relative}
+.mchip input{position:absolute;opacity:0;pointer-events:none}
+.mchip label{display:flex;flex-direction:column;align-items:center;gap:1px;border:1px solid var(--line);border-radius:6px;padding:6px 2px;cursor:pointer;font-size:.8rem;font-weight:500;user-select:none}
+.mchip label small{font-size:.64rem;color:var(--muted);font-weight:400}
+.mchip input:checked + label{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.mchip input:checked + label small{color:inherit;opacity:.85}
+.mchip input:disabled + label{background:var(--ok-bg);color:var(--ok);border-color:transparent;cursor:not-allowed}
+.mchip input:focus-visible + label{outline:2px solid var(--accent);outline-offset:2px}
+.mchip.due label{border-color:var(--bad)}
+.note-box{background:var(--surface-2);border:1px solid var(--line-2);border-radius:8px;padding:10px 12px;font-size:.84rem}
+.dl{display:grid;grid-template-columns:auto minmax(0,1fr);gap:6px 14px;font-size:.88rem}
+.dl dt{color:var(--muted)} .dl dd{margin:0}
+.mlist{display:flex;flex-wrap:wrap;gap:5px}
+
+/* reçu */
+.recu{border:1px solid var(--line);border-radius:8px;padding:18px;display:flex;flex-direction:column;gap:12px;background:var(--surface)}
+.recu-h{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;border-bottom:2px solid var(--ink);padding-bottom:10px}
+.recu .big{font-family:var(--f-mono);font-size:1.4rem;font-weight:500}
+.recu .lettres{font-style:italic;font-size:.88rem}
+
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:9px 16px;border-radius:8px;font-weight:500;z-index:80;box-shadow:var(--shadow);max-width:calc(100% - 32px)}
+.banner{border:1px solid var(--warn);background:var(--warn-bg);color:var(--ink);border-radius:8px;padding:10px 14px;font-size:.86rem;display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.stack{display:flex;flex-direction:column;gap:18px}
+.list-plain{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.list-plain li{display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid var(--line-2);align-items:center}
+.list-plain li:last-child{border-bottom:0}
+.sign-in{color:var(--ok)} .sign-out{color:var(--bad)}
+
+/* ---------- états imprimables (aperçu papier : volontairement blanc dans les deux thèmes) ---------- */
+.et-bar{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end}
+.et-bar .field{min-width:180px}
+.paper-wrap{overflow-x:auto;background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding-block:20px;padding-left:16px;padding-right:16px}
+.paper{background:#FFFFFF;color:#161C24;width:100%;max-width:820px;margin:0 auto;padding:30px 34px;box-shadow:0 2px 10px rgba(0,0,0,.12);font-family:var(--f-body);font-size:12px;line-height:1.45;color-scheme:light}
+.paper.land{max-width:1120px;min-width:900px}
+.paper{min-width:640px}
+.paper + .paper{margin-top:18px}
+.pp-h{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;border-bottom:2px solid #161C24;padding-bottom:10px;margin-bottom:14px}
+.pp-h h2{font-family:var(--f-display);font-size:18px;color:#161C24}
+.pp-h .s{color:#5A6472;font-size:11px}
+.pp-h .r{text-align:right}
+.pp-sec{font-family:var(--f-display);font-weight:700;font-size:13px;margin:16px 0 6px;color:#161C24}
+.pp-boxes{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.pp-box{border:1px solid #CBD2DA;border-radius:4px;padding:8px 10px}
+.pp-box .l{font-size:9.5px;text-transform:uppercase;letter-spacing:.06em;color:#5A6472;font-weight:600}
+.pp-box .v{font-family:var(--f-mono);font-size:14px;font-variant-numeric:tabular-nums}
+.pp-box.bad .v{color:#AE2A21} .pp-box.ok .v{color:#1C7A4B}
+table.pp{width:100%;border-collapse:collapse;font-size:11px;color:#161C24}
+.pp th{background:#18212C;color:#FFFFFF;font-weight:600;text-align:left;padding:5px 6px;font-size:10px;white-space:nowrap}
+.pp td{border:1px solid #D5DBE2;padding:4px 6px;vertical-align:top}
+.pp td.r,.pp th.r{text-align:right} .pp td.c,.pp th.c{text-align:center}
+.pp .n{font-family:var(--f-mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+.pp tfoot td{font-weight:700;background:#F0F3F6}
+.pp .st-paid{background:#E0F2E8;color:#1C7A4B;font-weight:600}
+.pp .st-unpaid{background:#FAE3E0;color:#AE2A21;font-weight:600}
+.pp .st-pre{color:#9AA3AE}
+.pp .st-future{color:#5A6472}
+.pp-sign{display:flex;justify-content:space-between;gap:20px;margin-top:26px;font-size:11px;color:#5A6472}
+.pp-sign div{min-width:200px;border-top:1px solid #9AA3AE;padding-top:4px}
+.pp-note{font-size:10px;color:#5A6472;margin-top:8px}
+
+/* ---------- responsive ---------- */
+@media (max-width:900px){
+  .app{grid-template-columns:minmax(0,1fr)}
+  .side{position:sticky;top:env(safe-area-inset-top,0px);height:auto;z-index:20;flex-direction:row;align-items:center;padding-block:8px;padding-right:max(16px,env(safe-area-inset-right,0px));border-right:0;border-bottom:1px solid var(--line);gap:10px;overflow:visible}
+  body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--surface)}
+  .brand-sub,.side-foot,.brand-name{display:none}
+  .brand-mark{width:26px;height:30px}
+  .nav{flex-direction:row;overflow-x:auto;scrollbar-width:none;flex:1;min-width:0}
+  .nav button{width:auto;white-space:nowrap;padding:7px 10px}
+  .grid2{grid-template-columns:minmax(0,1fr)}
+}
+@media (max-width:640px){
+  .kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .form-grid{grid-template-columns:minmax(0,1fr)}
+  .months{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .pp-boxes{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .floor{grid-template-columns:minmax(0,1fr)}
+  .floor-tag{flex-direction:row;justify-content:space-between;align-items:center;border-right:0;border-bottom:1px dashed var(--line)}
+  .units{grid-template-columns:repeat(auto-fill,minmax(140px,1fr))}
+  .nav button span.lbl{display:none}
+  .nav button[aria-current="page"] span.lbl{display:inline}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+/* ---------- connexion & immeuble ---------- */
+.auth{min-height:100vh;display:flex;align-items:center;justify-content:center;padding-block:32px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.auth-card{width:100%;max-width:400px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:26px;display:flex;flex-direction:column;gap:14px;box-shadow:var(--shadow)}
+.auth-brand{display:flex;gap:12px;align-items:center;margin-bottom:4px}
+.auth-brand .brand-mark{width:34px;height:40px}
+.auth-tabs{display:flex}.auth-tabs button{flex:1}
+.auth-msg{border-radius:7px;padding:9px 12px;font-size:.86rem}
+.auth-msg.ok{background:var(--ok-bg);color:var(--ok)} .auth-msg.bad{background:var(--bad-bg);color:var(--bad)}
+.immbar{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;padding-bottom:12px;border-bottom:1px solid var(--line)}
+.immbar select{width:auto;min-width:200px;max-width:100%;font-weight:600}
+.immbar .who{margin-left:auto;display:flex;gap:8px;align-items:center;font-size:.82rem;color:var(--muted);min-width:0}
+.immbar .who span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:220px}
+#view{display:flex;flex-direction:column;gap:18px;min-width:0}
+.copybox{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.copybox code{background:var(--surface-2);border:1px solid var(--line-2);border-radius:6px;padding:5px 8px;font-family:var(--f-mono);font-size:.8rem;word-break:break-all}
+@media print{
+  html,body{background:#fff!important}
+  .side,#immbar,.no-print,.toast,.banner,.overlay{display:none!important}
+  .app{display:block}.main{padding:0!important}.main-in{max-width:none}
+  .paper-wrap{border:0;padding:0!important;background:none;overflow:visible;border-radius:0}
+  .paper{box-shadow:none;max-width:none!important;min-width:0!important;padding:0;margin:0}
+  .paper+.paper{break-before:page;margin-top:0}
+  .pp tr{break-inside:avoid}
+  *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+}
+</style>
+</head>
+<body>
+<div class="auth" id="auth" hidden></div>
+<div class="app" hidden>
+  <aside class="side">
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 34 40" aria-hidden="true"><rect x="3" y="4" width="28" height="35" rx="2" fill="var(--accent)"/><rect x="0" y="1" width="34" height="5" rx="1.5" fill="var(--roof)"/><g fill="var(--accent-ink)" opacity=".9"><rect x="8" y="10" width="6" height="5"/><rect x="20" y="10" width="6" height="5"/><rect x="8" y="19" width="6" height="5"/><rect x="20" y="19" width="6" height="5"/><rect x="14" y="29" width="6" height="10"/></g></svg>
+      <div><div class="brand-name" id="brand-name">Registre du Syndic</div><div class="brand-sub" id="brand-sub">Gestion de copropriété</div></div>
+    </div>
+    <nav class="nav" id="nav" aria-label="Sections"></nav>
+    <div class="side-foot">
+      <div class="caisse"><div class="eyebrow">Solde de caisse</div><div class="num" id="side-solde">—</div></div>
+      <div class="mode-pill" id="mode-pill"></div>
+    </div>
+  </aside>
+  <main class="main"><div class="main-in"><div id="immbar"></div><div id="view"><div class="empty"><h3>Chargement du registre…</h3></div></div></div></main>
+</div>
+<div class="overlay" id="modal" hidden></div>
+<div class="toast" id="toast" hidden></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
+<script>
+(() => {
+'use strict';
+/* ================= constantes & utilitaires ================= */
+const MOIS = ['Janv','Févr','Mars','Avr','Mai','Juin','Juil','Août','Sept','Oct','Nov','Déc'];
+const MOIS_L = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
+const CATS = ['Électricité parties communes','Eau','Nettoyage','Gardiennage / concierge','Ascenseur','Entretien & réparations','Jardinage','Assurance immeuble','Fournitures','Frais bancaires','Honoraires syndic','Divers'];
+const MODES = ['Espèces','Virement','Chèque','Versement bancaire'];
+const TYPES_LOT = ['Appartement','Magasin','Bureau','Garage'];
+const NOW = new Date();
+const CUR_KEY = ym(NOW.getFullYear(), NOW.getMonth()+1);
+const TODAY = NOW.toISOString().slice(0,10);
+const COLS = ['etages','apparts','paiements','depenses'];
+
+function ym(y,m){return y+'-'+String(m).padStart(2,'0')}
+function keyParts(k){return [ +k.slice(0,4), +k.slice(5,7) ]}
+function nextKey(k){let [y,m]=keyParts(k);m++;if(m>12){m=1;y++}return ym(y,m)}
+function monthRange(a,b){const out=[];if(!a||!b||a>b)return out;let k=a;while(k<=b){out.push(k);k=nextKey(k);if(out.length>600)break}return out}
+function keyLabel(k){const [y,m]=keyParts(k);return MOIS[m-1]+' '+y}
+function keyLong(k){const [y,m]=keyParts(k);return MOIS_L[m-1]+' '+y}
+const nf = new Intl.NumberFormat('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2});
+const nf0 = new Intl.NumberFormat('fr-FR',{maximumFractionDigits:0});
+function dh(n){return nf.format(+n||0)+' DH'}
+function dh0(n){return nf0.format(+n||0)+' DH'}
+function fdate(d){if(!d)return '—';const [y,m,j]=d.split('-');return j+'/'+m+'/'+y}
+function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function natCmp(a,b){return String(a).localeCompare(String(b),'fr',{numeric:true,sensitivity:'base'})}
+function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,8)}
+function enLettres(n){
+  const u=['zéro','un','deux','trois','quatre','cinq','six','sept','huit','neuf','dix','onze','douze','treize','quatorze','quinze','seize','dix-sept','dix-huit','dix-neuf'];
+  const d=['','dix','vingt','trente','quarante','cinquante','soixante','soixante','quatre-vingt','quatre-vingt'];
+  const s100=n=>{if(n<20)return u[n];const t=Math.floor(n/10),r=n%10;
+    if(t===7||t===9)return d[t]+(t===7&&r===1?' et ':'-')+u[10+r];
+    if(r===0)return t===8?'quatre-vingts':d[t];
+    if(r===1&&t!==8)return d[t]+' et un';return d[t]+'-'+u[r]};
+  const s1000=n=>{const c=Math.floor(n/100),r=n%100;let s='';if(c)s=c===1?'cent':u[c]+' cent'+(r===0?'s':'');if(r)s+=(s?' ':'')+s100(r);return s};
+  if(n===0)return 'zéro';const p=[],mi=Math.floor(n/1e6),th=Math.floor(n%1e6/1000),re=n%1000;
+  if(mi)p.push(s1000(mi)+' million'+(mi>1?'s':''));
+  if(th)p.push(th===1?'mille':s1000(th).replace(/cents$/,'cent').replace(/vingts$/,'vingt')+' mille');
+  if(re)p.push(s1000(re));return p.join(' ');
+}
+function montantLettres(x){const v=Math.round((+x||0)*100);const dhs=Math.floor(v/100),c=v%100;
+  let s=enLettres(dhs)+' dirham'+(dhs>1?'s':'');if(c)s+=' et '+enLettres(c)+' centime'+(c>1?'s':'');return s.charAt(0).toUpperCase()+s.slice(1)}
+
+const ICON = {
+  tableau:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>',
+  immeuble:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 21V5l8-3 8 3v16"/><path d="M9 21v-4h6v4M8 8h2M14 8h2M8 12h2M14 12h2"/><path d="M2 21h20"/></svg>',
+  suivi:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="17" rx="1"/><path d="M3 9h18M9 4v17M15 4v17M3 15h18"/></svg>',
+  paiements:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="6" width="20" height="13" rx="2"/><path d="M2 10h20M6 15h4"/></svg>',
+  depenses:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/></svg>',
+  parametres:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>',
+  etats:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 8V3h10v5"/><rect x="3" y="8" width="18" height="9" rx="1.5"/><path d="M7 14h10v7H7z"/><path d="M17 11h1"/></svg>',
+  plus:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>',
+  edit:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg>',
+  trash:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>',
+  recu:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 9l2 2 4-4"/></svg>',
+  close:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+  left:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 6l-6 6 6 6"/></svg>',
+  right:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>',
+  dl:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v12M7 10l5 5 5-5M4 20h16"/></svg>',
+  wand:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20L16 8M14 4v3M18 8h3M17 3l-1.5 1.5M20 6l-1.5 1.5"/></svg>'
+};
+const VIEWS = [['tableau','Tableau de bord'],['immeuble','Immeuble'],['suivi','Suivi des cotisations'],['etats','États imprimables'],['paiements','Paiements'],['depenses','Dépenses'],['parametres','Paramètres']];
+
+/* ================= état ================= */
+const S = {
+  config:{}, etages:[], apparts:[], paiements:[], depenses:[],
+  year: NOW.getFullYear(), view: 'tableau', immMode:'facade', canWrite:true, mode:'loading', loaded:{},
+  fp:{q:'',appart:'',mois:'',mode:''}, fd:{q:'',cat:'',mois:''}, et:{type:'global',lot:''}
+};
+try{ const v=localStorage.getItem('syndic-view'); if(v && VIEWS.some(x=>x[0]===v)) S.view=v; }catch(e){}
+try{ const h=location.hash.slice(1); if(VIEWS.some(x=>x[0]===h)) S.view=h; }catch(e){}
+
+/* ================= stockage : Supabase ================= */
+const CFG = window.SYNDIC_CONFIG || {};
+const SB = (window.supabase && CFG.url && CFG.key && !/VOTRE/.test(CFG.url)) ? window.supabase.createClient(CFG.url, CFG.key, {auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}}) : null;
+const A = { ready:false, user:null, imms:[], role:null, recovery:false, tab:'login', msg:'', msgOk:false, busy:false, membres:[], invitations:[], accesLoaded:false, err:'' };
+let IMM = null;
+const ROLE_LBL = {owner:'Propriétaire du compte', gestionnaire:'Gestionnaire', lecteur:'Lecture seule'};
+function denied(){ const e=new Error('denied'); e.code='denied'; return e; }
+const Store = {
+  async loadImmeubles(){
+    const {data:imms,error}=await SB.from('syndic_immeubles').select('id,nom,owner,data,created_at').order('created_at');
+    if(error) throw error;
+    const {data:mem}=await SB.from('syndic_membres').select('immeuble_id,role').eq('user_id',A.user.id);
+    const roles=new Map((mem||[]).map(m=>[m.immeuble_id,m.role]));
+    A.imms=(imms||[]).map(i=>({...i, role: i.owner===A.user.id?'owner':(roles.get(i.id)||'lecteur')}));
+    let want=null; try{want=localStorage.getItem('syndic-imm')}catch(e){}
+    const pick=A.imms.find(i=>i.id===want)||A.imms[0]||null;
+    await this.open(pick?pick.id:null);
+  },
+  async open(id){
+    IMM=id; A.accesLoaded=false; A.membres=[]; A.invitations=[];
+    try{ if(id) localStorage.setItem('syndic-imm',id) }catch(e){}
+    COLS.forEach(c=>S[c]=[]); S.config={}; S.loaded={};
+    const imm=A.imms.find(i=>i.id===id);
+    if(!imm){ S.mode='none'; S.canWrite=false; schedule(); return; }
+    A.role=imm.role; S.canWrite = imm.role==='owner'||imm.role==='gestionnaire';
+    S.config={...(imm.data||{}), nom: imm.nom||''};
+    S.mode='loading'; schedule();
+    await this.reload();
+    if(S.view==='parametres') loadAcces();
+  },
+  async reload(){
+    if(!IMM) return;
+    const all=[]; let from=0;
+    for(;;){ const {data,error}=await SB.from('syndic_docs').select('id,col,data').eq('immeuble_id',IMM).range(from,from+999); if(error) throw error; all.push(...data); if(data.length<1000) break; from+=1000; }
+    COLS.forEach(c=>S[c]=[]);
+    all.forEach(r=>{ if(S[r.col]) S[r.col].push({id:r.id,...r.data}); });
+    S.loaded={config:true,etages:true,apparts:true,paiements:true,depenses:true}; S.mode='db'; schedule();
+  },
+  async add(col,data){ const {data:r,error}=await SB.from('syndic_docs').insert({immeuble_id:IMM,col,data}).select('id').single(); if(error) throw error; S[col]=[...S[col],{id:r.id,...data}]; schedule(); return r.id; },
+  async set(col,id,data){ const {data:r,error}=await SB.from('syndic_docs').update({data,updated_at:new Date().toISOString()}).eq('id',id).select('id'); if(error) throw error; if(!r||!r.length) throw denied(); S[col]=S[col].map(x=>x.id===id?{id,...data}:x); schedule(); },
+  async del(col,id){ const {data:r,error}=await SB.from('syndic_docs').delete().eq('id',id).select('id'); if(error) throw error; if(!r||!r.length) throw denied(); S[col]=S[col].filter(x=>x.id!==id); schedule(); },
+  async setConfig(data){ const {nom='',...rest}=data; const {data:r,error}=await SB.from('syndic_immeubles').update({nom,data:rest}).eq('id',IMM).select('id'); if(error) throw error; if(!r||!r.length) throw denied(); S.config={...data}; const i=A.imms.find(x=>x.id===IMM); if(i){i.nom=nom;i.data=rest} schedule(); },
+  async createImmeuble(nom){
+    const {data:r,error}=await SB.from('syndic_immeubles').insert({nom,data:{debut:ym(NOW.getFullYear(),1),cotisationDefaut:0,soldeInitial:0}}).select('id,nom,owner,data,created_at').single();
+    if(error) throw error; A.imms.push({...r,role:'owner'}); await this.open(r.id); return r.id;
+  }
+};
+async function guard(fn,okMsg){
+  if(!S.canWrite){ toast("Vous avez un accès en lecture seule à cet immeuble."); return false; }
+  try{ await fn(); if(okMsg) toast(okMsg); return true; }
+  catch(e){
+    console.error(e);
+    if(e&&e.code==='denied') toast("Modification refusée : votre accès à cet immeuble est en lecture seule.");
+    else if(navigator.onLine===false) toast("Pas de connexion internet. Réessayez quand la connexion revient.");
+    else toast("L'enregistrement a échoué : "+((e&&e.message)||'erreur inconnue'));
+    return false;
+  }
+}
+async function loadAcces(){
+  if(!IMM||A.role!=='owner'){ A.accesLoaded=true; schedule(); return; }
+  const [m,i]=await Promise.all([SB.from('syndic_membres').select('user_id,email,role').eq('immeuble_id',IMM).order('created_at'),SB.from('syndic_invitations').select('email,role').eq('immeuble_id',IMM).order('created_at')]);
+  A.membres=m.data||[]; A.invitations=i.data||[]; A.accesLoaded=true; schedule();
+}
+
+/* ================= authentification ================= */
+let lastUid;
+function authInit(){
+  if(!SB){ A.ready=true; schedule(); return; }
+  SB.auth.onAuthStateChange((ev,session)=>{
+    if(ev==='PASSWORD_RECOVERY') A.recovery=true;
+    A.user=session?session.user:null; A.ready=true;
+    const uid=A.user?A.user.id:null;
+    if(uid!==lastUid){ lastUid=uid; setTimeout(afterLogin,0); } else schedule();
+  });
+}
+async function afterLogin(){
+  if(!A.user){ A.imms=[]; IMM=null; S.mode='auth'; schedule(); return; }
+  S.mode='loading'; schedule();
+  try{ await SB.rpc('syndic_accepter_invitations'); }catch(e){}
+  try{ await Store.loadImmeubles(); }
+  catch(e){ console.error(e); S.mode='error'; A.err=(e&&e.message)||'Erreur inconnue'; schedule(); }
+}
+const AUTH_ERR = {invalid_credentials:'E-mail ou mot de passe incorrect.', email_not_confirmed:"Confirmez d'abord votre adresse e-mail grâce au lien reçu par e-mail.", user_already_exists:'Un compte existe déjà avec cet e-mail. Connectez-vous.', weak_password:'Mot de passe trop faible : 8 caractères minimum, avec lettres et chiffres.', over_email_send_rate_limit:"Trop d'e-mails envoyés. Patientez quelques minutes.", over_request_rate_limit:'Trop de tentatives. Patientez quelques minutes.'};
+function authErr(e){ return AUTH_ERR[e&&e.code] || ((e&&e.message)||'Une erreur est survenue.'); }
+function siteUrl(){ return location.origin+location.pathname; }
+function authScreen(){
+  const brand=`<div class="auth-brand"><svg class="brand-mark" viewBox="0 0 34 40" aria-hidden="true"><rect x="3" y="4" width="28" height="35" rx="2" fill="var(--accent)"/><rect x="0" y="1" width="34" height="5" rx="1.5" fill="var(--roof)"/><g fill="var(--accent-ink)" opacity=".9"><rect x="8" y="10" width="6" height="5"/><rect x="20" y="10" width="6" height="5"/><rect x="8" y="19" width="6" height="5"/><rect x="20" y="19" width="6" height="5"/><rect x="14" y="29" width="6" height="10"/></g></svg><div><div class="brand-name">Registre du Syndic</div><div class="brand-sub">Gestion de copropriété</div></div></div>`;
+  if(!SB) return `<div class="auth-card">${brand}<h2>Configuration requise</h2><p class="muted">Renseignez l'adresse et la clé publique de votre projet Supabase dans le fichier <code>config.js</code>, puis rechargez la page.</p></div>`;
+  if(!A.ready) return `<div class="auth-card">${brand}<p class="muted">Chargement…</p></div>`;
+  const msg=A.msg?`<div class="auth-msg ${A.msgOk?'ok':'bad'}" role="status">${esc(A.msg)}</div>`:'';
+  if(A.recovery) return `<form class="auth-card" id="f-auth" data-mode="recovery">${brand}<h2>Nouveau mot de passe</h2>
+    <div class="field"><label for="au-pw">Nouveau mot de passe</label><input class="input" id="au-pw" name="password" type="password" minlength="8" autocomplete="new-password" required></div>${msg}
+    <button class="btn primary" ${A.busy?'disabled':''}>Enregistrer le mot de passe</button></form>`;
+  const t=A.tab;
+  return `<form class="auth-card" id="f-auth" data-mode="${t}">${brand}
+    ${t==='forgot'?'<h2>Mot de passe oublié</h2><p class="muted" style="margin:0">Indiquez votre e-mail : vous recevrez un lien pour choisir un nouveau mot de passe.</p>':`<div class="seg auth-tabs" role="group"><button type="button" data-act="auth-tab" data-t="login" aria-pressed="${t==='login'}">Se connecter</button><button type="button" data-act="auth-tab" data-t="signup" aria-pressed="${t==='signup'}">Créer un compte</button></div>`}
+    <div class="field"><label for="au-email">E-mail</label><input class="input" id="au-email" name="email" type="email" autocomplete="email" required value="${esc(A.lastEmail||'')}"></div>
+    ${t!=='forgot'?`<div class="field"><label for="au-pw">Mot de passe</label><input class="input" id="au-pw" name="password" type="password" minlength="${t==='signup'?8:1}" autocomplete="${t==='signup'?'new-password':'current-password'}" required>${t==='signup'?'<span class="muted" style="font-size:.76rem">8 caractères minimum.</span>':''}</div>`:''}
+    ${msg}
+    <button class="btn primary" ${A.busy?'disabled':''}>${t==='login'?'Se connecter':t==='signup'?'Créer mon compte':'Envoyer le lien'}</button>
+    ${t==='login'?'<button type="button" class="link" data-act="auth-tab" data-t="forgot">Mot de passe oublié ?</button>':t==='forgot'?'<button type="button" class="link" data-act="auth-tab" data-t="login">Retour à la connexion</button>':'<p class="muted" style="margin:0;font-size:.8rem">Invité par un syndic ? Créez votre compte avec l\'e-mail auquel l\'invitation a été faite.</p>'}
+  </form>`;
+}
+document.addEventListener('submit',async e=>{
+  const f=e.target; if(f.id!=='f-auth') return; e.preventDefault(); if(A.busy) return;
+  const mode=f.dataset.mode, email=(f.elements.email?f.elements.email.value.trim():''), pw=f.elements.password?f.elements.password.value:'';
+  A.lastEmail=email||A.lastEmail; A.busy=true; A.msg=''; paintAuth(true);
+  try{
+    if(mode==='login'){ const {error}=await SB.auth.signInWithPassword({email,password:pw}); if(error) throw error; }
+    else if(mode==='signup'){ const {data,error}=await SB.auth.signUp({email,password:pw,options:{emailRedirectTo:siteUrl()}}); if(error) throw error;
+      if(!data.session){ A.msg='Compte créé. Ouvrez le lien de confirmation reçu par e-mail, puis connectez-vous.'; A.msgOk=true; A.tab='login'; } }
+    else if(mode==='forgot'){ const {error}=await SB.auth.resetPasswordForEmail(email,{redirectTo:siteUrl()}); if(error) throw error; A.msg='Si un compte existe pour cet e-mail, un lien vient de vous être envoyé.'; A.msgOk=true; }
+    else if(mode==='recovery'){ const {error}=await SB.auth.updateUser({password:pw}); if(error) throw error; A.recovery=false; toast('Mot de passe modifié'); }
+  }catch(err){ A.msg=authErr(err); A.msgOk=false; }
+  A.busy=false; paintAuth(true); schedule();
+});
+let authKey='';
+function paintAuth(force){
+  const el=document.getElementById('auth'); const k=[!!SB,A.ready,A.recovery,A.tab,A.msg,A.busy].join('|');
+  if(force||k!==authKey){ authKey=k; el.innerHTML=authScreen(); const f=el.querySelector('input'); if(f&&!A.busy) f.focus(); }
+}
+
+/* ================= calculs ================= */
+const etById = id => S.etages.find(e=>e.id===id);
+const apById = id => S.apparts.find(a=>a.id===id);
+function etagesSorted(){return [...S.etages].sort((a,b)=>(+b.ordre||0)-(+a.ordre||0))}
+function appartsOf(eid){return S.apparts.filter(a=>a.etageId===eid).sort((a,b)=>natCmp(a.numero,b.numero))}
+function appartsSorted(){const out=[];etagesSorted().forEach(e=>out.push(...appartsOf(e.id)));S.apparts.filter(a=>!etById(a.etageId)).forEach(a=>out.push(a));return out}
+function appDebut(a){return a.debut || S.config.debut || ym(S.year,1)}
+function cotis(a){return +(a.cotisation ?? S.config.cotisationDefaut) || 0}
+function paidMap(){ // appartId -> Map(monthKey -> paiement)
+  const m=new Map();
+  S.paiements.forEach(p=>{ if(p.type!=='cotisation'||!Array.isArray(p.mois))return; let mm=m.get(p.appartId); if(!mm){mm=new Map();m.set(p.appartId,mm)} p.mois.forEach(k=>mm.set(k,p)); });
+  return m;
+}
+function arrears(a,pm){
+  const paid=(pm||paidMap()).get(a.id)||new Map();
+  const due=monthRange(appDebut(a),CUR_KEY).filter(k=>!paid.has(k));
+  return {months:due, montant:due.length*cotis(a)};
+}
+function statusOf(n){ if(n===0) return ['ok','À jour']; if(n<=2) return ['warn',n+' mois en retard']; return ['bad',n+' mois en retard']; }
+function soldeCaisse(){
+  const ins=S.paiements.reduce((s,p)=>s+(+p.montant||0),0), outs=S.depenses.reduce((s,d)=>s+(+d.montant||0),0);
+  return (+S.config.soldeInitial||0)+ins-outs;
+}
+function yearOf(d){return d?+d.slice(0,4):0}
+function yearsAvailable(){
+  const ys=new Set([NOW.getFullYear(),S.year]);
+  const deb=S.config.debut; if(deb) for(let y=+deb.slice(0,4);y<=NOW.getFullYear();y++) ys.add(y);
+  S.paiements.forEach(p=>{ys.add(yearOf(p.date));(p.mois||[]).forEach(k=>ys.add(+k.slice(0,4)))});
+  S.depenses.forEach(d=>ys.add(yearOf(d.date)));
+  ys.delete(0); return [...ys].sort();
+}
+function nextRecu(){return S.paiements.reduce((m,p)=>Math.max(m,+p.recu||0),0)+1}
+function recuNo(p){return p.recu?String(p.recu).padStart(4,'0'):'—'}
+function appLabel(a){ if(!a) return 'Lot supprimé'; const e=etById(a.etageId); return (a.type&&a.type!=='Appartement'?a.type+' ':'Appt ')+a.numero+(e?' · '+e.nom:''); }
+function moisSummary(arr){ if(!arr||!arr.length) return ''; const s=[...arr].sort(); if(s.length===1) return keyLabel(s[0]);
+  const contiguous = s.every((k,i)=>i===0||nextKey(s[i-1])===k);
+  return contiguous ? keyLabel(s[0])+' → '+keyLabel(s[s.length-1])+' ('+s.length+' mois)' : s.length+' mois : '+s.map(keyLabel).join(', '); }
+
+/* ================= rendu ================= */
+let raf=0; function schedule(){ if(raf) return; raf=requestAnimationFrame(()=>{raf=0;render()}); }
+function ready(){ return S.mode==='db'; }
+
+function render(){
+  const appEl=document.querySelector('.app'), authEl=document.getElementById('auth');
+  if(!SB||!A.ready||A.recovery||!A.user){ appEl.hidden=true; authEl.hidden=false; paintAuth(); return; }
+  appEl.hidden=false; authEl.hidden=true; authKey='';
+  document.getElementById('immbar').innerHTML = immBar();
+  document.getElementById('nav').innerHTML = VIEWS.map(([k,l])=>`<button type="button" data-act="nav" data-v="${k}" ${S.view===k?'aria-current="page"':''}>${ICON[k]}<span class="lbl">${l}</span></button>`).join('');
+  document.getElementById('brand-name').textContent = S.config.nom || 'Registre du Syndic';
+  document.getElementById('brand-sub').textContent = S.config.nom ? (S.config.ville||'Copropriété') : 'Gestion de copropriété';
+  const sol=soldeCaisse(); const se=document.getElementById('side-solde'); se.textContent=dh(sol); se.style.color= sol<0?'var(--bad)':'';
+  document.getElementById('mode-pill').textContent = A.role ? 'Votre accès : '+ROLE_LBL[A.role] : '';
+  const v=document.getElementById('view');
+  if(S.mode==='none'){ v.innerHTML=firstImmeuble(); return; }
+  if(S.mode==='error'){ v.innerHTML=`<section class="panel"><div class="empty"><h3>Impossible de charger les données</h3><span>${esc(A.err)}</span><button class="btn primary" data-act="retry">Réessayer</button></div></section>`; return; }
+  if(!ready()){ v.innerHTML='<div class="empty"><h3>Chargement du registre…</h3></div>'; return; }
+  const keep = {x:window.scrollX,y:window.scrollY};
+  const ae=document.activeElement; const aeId = ae && v.contains(ae) ? ae.id : null; const selS=ae&&ae.selectionStart;
+  v.innerHTML = ({tableau:vTableau,immeuble:vImmeuble,suivi:vSuivi,etats:vEtats,paiements:vPaiements,depenses:vDepenses,parametres:vParametres}[S.view]||vTableau)();
+  if(aeId){ const n=document.getElementById(aeId); if(n){ n.focus(); try{ if(selS!=null) n.setSelectionRange(selS,selS);}catch(e){} } }
+  window.scrollTo(keep.x,keep.y);
+}
+
+function yearSel(){ return `<div class="year-sel" role="group" aria-label="Exercice"><button class="icon-btn" data-act="year" data-d="-1" aria-label="Année précédente">${ICON.left}</button><span>${S.year}</span><button class="icon-btn" data-act="year" data-d="1" aria-label="Année suivante">${ICON.right}</button></div>`; }
+function wbtn(act,label,extra='',cls='btn'){ return `<button type="button" class="${cls}" data-act="${act}" ${extra} ${S.canWrite?'':'disabled'}>${label}</button>`; }
+function exBadge(o){ return o&&o.exemple?' <span class="ex-badge">exemple</span>':''; }
+function banner(){
+  let h='';
+  if(A.role==='lecteur') h+=`<div class="banner"><span>Vous consultez cet immeuble en <strong>lecture seule</strong>. Les états imprimables et les exports restent disponibles.</span></div>`;
+  if([...S.etages,...S.apparts,...S.paiements,...S.depenses].some(x=>x.exemple)) h+=`<div class="banner"><span>Cet immeuble contient des <strong>données d'exemple</strong> pour vous montrer le fonctionnement. Supprimez-les quand vous saisissez vos vraies données.</span>${wbtn('clear-examples','Supprimer les exemples','','btn sm')}</div>`;
+  return h;
+}
+
+
+function immBar(){
+  const opts=A.imms.map(i=>`<option value="${i.id}" ${i.id===IMM?'selected':''}>${esc(i.nom||'Immeuble sans nom')}${i.role!=='owner'?' ('+(i.role==='lecteur'?'lecture':'gestion')+')':''}</option>`).join('');
+  return `<div class="immbar">${A.imms.length?`<label class="eyebrow" for="imm-switch">Immeuble</label><select class="input" id="imm-switch">${opts}</select>`:''}
+    <button class="btn sm" data-act="new-imm">${ICON.plus} Nouvel immeuble</button>
+    <div class="who"><span title="${esc(A.user.email)}">${esc(A.user.email)}</span><button class="btn sm ghost" data-act="logout">Se déconnecter</button></div></div>`;
+}
+function firstImmeuble(){
+  return `<div class="topbar"><div><div class="eyebrow">Bienvenue</div><h1>Créez votre premier immeuble</h1></div></div>
+  <section class="panel"><form class="panel-b stack" id="f-first" style="max-width:520px">
+    <p style="margin:0">Donnez un nom à l'immeuble ou à la résidence que vous gérez. Vous pourrez ensuite générer les étages et les appartements, puis ajouter d'autres immeubles.</p>
+    <div class="field"><label for="fi-nom">Nom de l'immeuble</label><input class="input" id="fi-nom" name="nom" required placeholder="ex. Résidence Al Amal – Immeuble B"></div>
+    <div><button class="btn primary">Créer l'immeuble</button></div>
+    <p class="muted" style="margin:0;font-size:.82rem">Vous avez été invité par un syndic ? Demandez-lui de vérifier l'e-mail utilisé pour l'invitation : il doit être identique à celui de votre compte (${esc(A.user.email)}).</p>
+  </form></section>`;
+}
+function formNewImm(){
+  openModal(`${sheetHead('Nouvel immeuble','Immeubles')}<form id="f-newimm"><div class="sheet-b"><div class="field"><label for="ni-nom">Nom de l'immeuble</label><input class="input" id="ni-nom" name="nom" required placeholder="ex. Résidence Les Orangers – Immeuble C"></div><p class="muted" style="margin:0;font-size:.84rem">Chaque immeuble a ses propres étages, lots, paiements, dépenses et accès.</p></div><div class="sheet-f"><button type="button" class="btn" data-act="close">Annuler</button><button class="btn primary">Créer</button></div></form>`);
+  document.getElementById('f-newimm').onsubmit=async ev=>{ev.preventDefault(); const nom=ev.target.elements.nom.value.trim(); try{ await Store.createImmeuble(nom); closeModal(); S.view='immeuble'; toast('Immeuble créé'); schedule(); }catch(e){ toast("La création a échoué : "+(e.message||'erreur')); } };
+}
+function sectionAcces(){
+  if(A.role!=='owner') return `<section class="panel"><div class="panel-h"><h2>Votre accès</h2></div><div class="panel-b stack"><p style="margin:0">Vous accédez à cet immeuble en tant que <strong>${esc(ROLE_LBL[A.role]||'')}</strong>.</p><div><button class="btn danger" data-act="leave-imm">Quitter cet immeuble</button></div></div></section>`;
+  const rows=[...A.membres.map(m=>({k:'m',email:m.email,role:m.role,id:m.user_id})),...A.invitations.map(i=>({k:'i',email:i.email,role:i.role}))];
+  return `<section class="panel"><div class="panel-h"><h2>Accès à cet immeuble</h2></div><div class="panel-b stack">
+    <p style="margin:0;max-width:70ch">Invitez le conseil syndical ou des copropriétaires. La personne crée son compte sur ce site <strong>avec l'e-mail invité</strong>, et l'immeuble apparaît automatiquement.</p>
+    <div class="copybox"><code id="site-url">${esc(siteUrl())}</code><button class="btn sm" data-act="copy-url">Copier le lien du site</button></div>
+    <form id="f-invite" class="filters"><input class="input search" id="inv-email" name="email" type="email" required placeholder="email@exemple.com"><select class="input" id="inv-role" name="role"><option value="lecteur">Lecture seule</option><option value="gestionnaire">Gestionnaire (peut saisir)</option></select><button class="btn primary">Inviter</button></form>
+    ${!A.accesLoaded?'<p class="muted" style="margin:0">Chargement des accès…</p>':rows.length?`<div class="tbl-wrap"><table class="tbl"><thead><tr><th>E-mail</th><th>Rôle</th><th>Statut</th><th></th></tr></thead><tbody>
+    ${rows.map(r=>`<tr><td>${esc(r.email)}</td><td>${r.role==='lecteur'?'Lecture seule':'Gestionnaire'}</td><td>${r.k==='m'?'<span class="chip ok">Actif</span>':'<span class="chip warn">Invitation en attente</span>'}</td><td class="r"><button class="btn sm ghost danger" data-act="${r.k==='m'?'del-membre':'del-invit'}" data-id="${esc(r.k==='m'?r.id:r.email)}">Retirer</button></td></tr>`).join('')}</tbody></table></div>`:'<p class="muted" style="margin:0">Personne d\'autre n\'a accès à cet immeuble pour l\'instant.</p>'}
+  </div></section>
+  <section class="panel"><div class="panel-h"><h2>Supprimer l'immeuble</h2><button class="btn danger" data-act="del-imm">${ICON.trash} Supprimer</button></div><div class="panel-b muted">Supprime définitivement l'immeuble avec ses étages, lots, paiements et dépenses, ainsi que les accès partagés.</div></section>`;
+}
+
+/* ---------- Tableau de bord ---------- */
+function vTableau(){
+  if(!S.etages.length && !S.apparts.length) return onboarding();
+  const y=S.year, pm=paidMap();
+  const pY=S.paiements.filter(p=>yearOf(p.date)===y), dY=S.depenses.filter(d=>yearOf(d.date)===y);
+  const enc=pY.reduce((s,p)=>s+(+p.montant||0),0), dep=dY.reduce((s,d)=>s+(+d.montant||0),0);
+  // recouvrement de l'année : mois dus (jusqu'au mois courant) payés
+  const endY = y<NOW.getFullYear()? ym(y,12) : CUR_KEY; let dueN=0, paidN=0, attendu=0;
+  S.apparts.forEach(a=>{ const r=monthRange(appDebut(a)>ym(y,1)?appDebut(a):ym(y,1), endY); const pa=pm.get(a.id)||new Map(); dueN+=r.length; attendu+=r.length*cotis(a); paidN+=r.filter(k=>pa.has(k)).length; });
+  const taux = dueN? Math.round(paidN/dueN*100):100;
+  let impN=0, impM=0; const late=[];
+  S.apparts.forEach(a=>{const r=arrears(a,pm); if(r.months.length){impN++;impM+=r.montant;late.push({a,r})}});
+  late.sort((x,z)=>z.r.montant-x.r.montant);
+  const sol=soldeCaisse();
+  // séries mensuelles
+  const inM=Array(12).fill(0), outM=Array(12).fill(0);
+  pY.forEach(p=>inM[+p.date.slice(5,7)-1]+=(+p.montant||0)); dY.forEach(d=>outM[+d.date.slice(5,7)-1]+=(+d.montant||0));
+  const byCat={}; dY.forEach(d=>byCat[d.categorie||'Divers']=(byCat[d.categorie||'Divers']||0)+(+d.montant||0));
+  const cats=Object.entries(byCat).sort((a,b)=>b[1]-a[1]); const catMax=cats.length?cats[0][1]:1;
+  const mv=[...pY.map(p=>({t:'in',date:p.date,lib:appLabel(apById(p.appartId)),sub:(apById(p.appartId)||{}).proprietaire||'',m:+p.montant})),...dY.map(d=>({t:'out',date:d.date,lib:d.libelle||d.categorie,sub:d.categorie,m:+d.montant}))].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,7);
+  return `${banner()}
+  <div class="topbar"><div><div class="eyebrow">Exercice ${y}</div><h1>Tableau de bord</h1></div>
+    <div class="actions">${yearSel()}${wbtn('add-paiement',ICON.plus+' Paiement','','btn primary')}${wbtn('add-depense',ICON.plus+' Dépense')}</div></div>
+  <div class="kpis">
+    <div class="kpi"><span class="eyebrow">Encaissé en ${y}</span><span class="v">${dh(enc)}</span><span class="s">${pY.length} paiement${pY.length>1?'s':''} · attendu ${dh0(attendu)}</span></div>
+    <div class="kpi"><span class="eyebrow">Dépenses ${y}</span><span class="v">${dh(dep)}</span><span class="s">${dY.length} opération${dY.length>1?'s':''}</span></div>
+    <div class="kpi ${enc-dep<0?'neg':'pos'}"><span class="eyebrow">Résultat ${y}</span><span class="v">${enc-dep<0?'−':'+'}${dh(Math.abs(enc-dep))}</span><span class="s">Recettes − dépenses</span></div>
+    <div class="kpi ${sol<0?'neg':''}"><span class="eyebrow">Solde de caisse</span><span class="v">${dh(sol)}</span><span class="s">Solde initial inclus, toutes années</span></div>
+    <div class="kpi ${impM>0?'neg':''}"><span class="eyebrow">Impayés à ce jour</span><span class="v">${dh(impM)}</span><span class="s">${impN} lot${impN>1?'s':''} sur ${S.apparts.length} en retard</span></div>
+    <div class="kpi"><span class="eyebrow">Taux de recouvrement ${y}</span><span class="v">${taux} %</span><div class="meter" aria-hidden="true"><i style="width:${taux}%;background:${taux>=85?'var(--ok)':taux>=60?'var(--warn)':'var(--bad)'}"></i></div></div>
+  </div>
+  <div class="grid2">
+    <section class="panel"><div class="panel-h"><h2>Recettes et dépenses par mois</h2><div class="legend"><span><i style="background:var(--accent)"></i>Recettes</span><span><i style="background:var(--exp)"></i>Dépenses</span></div></div>
+      <div class="panel-b chart">${barChart(inM,outM)}</div></section>
+    <section class="panel"><div class="panel-h"><h2>Dépenses par poste</h2><span class="muted num">${dh0(dep)}</span></div>
+      <div class="panel-b">${cats.length?`<div class="hbar">${cats.map(([c,m])=>`<span>${esc(c)}</span><span class="num">${dh0(m)}</span><div class="bar"><i style="width:${Math.max(2,m/catMax*100)}%"></i></div>`).join('')}</div>`:`<div class="empty"><span>Aucune dépense en ${y}.</span></div>`}</div></section>
+  </div>
+  <div class="grid2">
+    <section class="panel"><div class="panel-h"><h2>Copropriétaires en retard</h2><button class="btn sm ghost" data-act="nav" data-v="suivi">Voir la grille</button></div>
+      ${late.length?`<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Lot</th><th>Propriétaire</th><th>Retard</th><th class="r">Montant dû</th><th></th></tr></thead><tbody>
+      ${late.slice(0,10).map(({a,r})=>{const [c,l]=statusOf(r.months.length);return `<tr><td><button class="link" data-act="open-appart" data-id="${a.id}">${esc(appLabel(a))}</button></td><td>${esc(a.proprietaire||'—')}</td><td><span class="chip ${c}">${l}</span></td><td class="r num">${dh(r.montant)}</td><td class="r">${wbtn('add-paiement','Encaisser',`data-appart="${a.id}" data-unpaid="1"`,'btn sm')}</td></tr>`}).join('')}
+      </tbody></table></div>`:`<div class="empty"><h3>Tout le monde est à jour</h3><span>Aucun mois impayé jusqu'à ${keyLong(CUR_KEY)}.</span></div>`}
+    </section>
+    <section class="panel"><div class="panel-h"><h2>Derniers mouvements</h2></div><div class="panel-b">
+      ${mv.length?`<ul class="list-plain">${mv.map(x=>`<li><div style="min-width:0"><div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(x.lib)}</div><div class="muted" style="font-size:.78rem">${fdate(x.date)} · ${esc(x.sub)}</div></div><span class="num ${x.t==='in'?'sign-in':'sign-out'}" style="white-space:nowrap">${x.t==='in'?'+':'−'}${dh(x.m)}</span></li>`).join('')}</ul>`:`<div class="empty"><span>Aucun mouvement en ${y}.</span></div>`}
+    </div></section>
+  </div>`;
+}
+function niceMax(v){ if(v<=0) return 1000; const p=Math.pow(10,Math.floor(Math.log10(v))); const n=v/p; const m=n<=1?1:n<=2?2:n<=2.5?2.5:n<=5?5:10; return m*p; }
+function barChart(a,b){
+  const W=720,H=250,L=58,R=10,T=12,B=28, iw=W-L-R, ih=H-T-B;
+  const mx=niceMax(Math.max(...a,...b)); const gw=iw/12, bw=Math.min(16,gw/2-4);
+  let g='';
+  for(let i=0;i<=4;i++){const v=mx*i/4,yy=T+ih-ih*i/4;g+=`<line x1="${L}" x2="${W-R}" y1="${yy}" y2="${yy}" stroke="var(--line-2)" stroke-width="1"/><text x="${L-8}" y="${yy+3}" text-anchor="end">${nf0.format(v)}</text>`;}
+  for(let m=0;m<12;m++){const cx=L+gw*m+gw/2;
+    const ha=ih*a[m]/mx, hb=ih*b[m]/mx;
+    g+=`<rect x="${cx-bw-1}" y="${T+ih-ha}" width="${bw}" height="${ha}" rx="2" fill="var(--accent)"><title>${MOIS[m]} · recettes ${dh(a[m])}</title></rect>`;
+    g+=`<rect x="${cx+1}" y="${T+ih-hb}" width="${bw}" height="${hb}" rx="2" fill="var(--exp)"><title>${MOIS[m]} · dépenses ${dh(b[m])}</title></rect>`;
+    g+=`<text x="${cx}" y="${H-9}" text-anchor="middle">${MOIS[m]}</text>`;}
+  g+=`<line x1="${L}" x2="${W-R}" y1="${T+ih}" y2="${T+ih}" stroke="var(--line)" stroke-width="1"/>`;
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Recettes et dépenses mensuelles en dirhams">${g}</svg>`;
+}
+function onboarding(){
+  return `${banner()}<div class="topbar"><div><div class="eyebrow">Bienvenue</div><h1>Décrivez votre immeuble</h1></div></div>
+  <section class="panel"><div class="panel-b stack">
+    <p style="margin:0;max-width:62ch">Commencez par créer les étages et les appartements. L'assistant génère toute la structure en une fois : vous pourrez ensuite renommer chaque lot et saisir les propriétaires.</p>
+    <div class="actions" style="display:flex;gap:8px;flex-wrap:wrap">${wbtn('gen-structure',ICON.wand+' Générer la structure','','btn primary')}${wbtn('edit-config','Renseigner l\'immeuble')}${wbtn('add-etage',ICON.plus+' Ajouter un étage')}</div>
+  </div></section>`;
+}
+
+/* ---------- Immeuble ---------- */
+function vImmeuble(){
+  const pm=paidMap(); const ets=etagesSorted(); const q=(S.immQ||'').toLowerCase();
+  const head = `${banner()}<div class="topbar"><div><div class="eyebrow">${S.etages.length} niveau${S.etages.length>1?'x':''} · ${S.apparts.length} lot${S.apparts.length>1?'s':''}</div><h1>Immeuble</h1></div>
+    <div class="actions"><div class="seg" role="group" aria-label="Affichage"><button data-act="imm-mode" data-m="facade" aria-pressed="${S.immMode==='facade'}">Façade</button><button data-act="imm-mode" data-m="liste" aria-pressed="${S.immMode==='liste'}">Liste</button></div>
+    ${wbtn('gen-structure',ICON.wand+' Générer')}${wbtn('add-etage',ICON.plus+' Étage','','btn primary')}</div></div>
+    <div class="filters"><input class="input search" id="imm-q" type="search" placeholder="Rechercher un lot ou un propriétaire…" value="${esc(S.immQ||'')}"><div class="legend-status"><span class="chip ok">À jour</span><span class="chip warn">1–2 mois</span><span class="chip bad">3 mois et plus</span></div></div>`;
+  if(!ets.length) return head+`<section class="panel"><div class="empty"><h3>Aucun étage pour l'instant</h3><span>Ajoutez le rez-de-chaussée puis les étages, ou générez la structure complète.</span><div style="display:flex;gap:8px">${wbtn('gen-structure',ICON.wand+' Générer la structure','','btn primary')}${wbtn('add-etage','Ajouter un étage')}</div></div></section>`;
+  const match=a=>!q||[a.numero,a.proprietaire,a.telephone,a.locataire].some(x=>String(x||'').toLowerCase().includes(q));
+  if(S.immMode==='liste'){
+    const rows=appartsSorted().filter(match);
+    return head+`<section class="panel"><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Lot</th><th>Étage</th><th>Propriétaire</th><th>Téléphone</th><th>Occupation</th><th class="r">Cotisation</th><th>État</th><th class="r">Dû</th><th></th></tr></thead><tbody>
+    ${rows.map(a=>{const r=arrears(a,pm);const [c,l]=statusOf(r.months.length);return `<tr><td><button class="link" data-act="open-appart" data-id="${a.id}">${esc((a.type&&a.type!=='Appartement'?a.type+' ':'')+a.numero)}</button>${exBadge(a)}</td><td>${esc((etById(a.etageId)||{}).nom||'—')}</td><td>${esc(a.proprietaire||'—')}</td><td class="mono">${esc(a.telephone||'')}</td><td>${esc(a.occupation||'')}</td><td class="r num">${dh(cotis(a))}</td><td><span class="chip ${c}">${l}</span></td><td class="r num">${dh(r.montant)}</td><td><div class="row-actions">${S.canWrite?`<button class="icon-btn" data-act="edit-appart" data-id="${a.id}" aria-label="Modifier">${ICON.edit}</button>`:''}</div></td></tr>`}).join('')||`<tr><td colspan="9" class="muted">Aucun lot ne correspond à la recherche.</td></tr>`}
+    </tbody></table></div></section>`;
+  }
+  const floors=ets.map(e=>{
+    const aps=appartsOf(e.id).filter(match);
+    const cot=appartsOf(e.id).reduce((s,a)=>s+cotis(a),0);
+    return `<div class="floor"><div class="floor-tag"><div><div class="nm">${esc(e.nom)}${exBadge(e)}</div><div class="muted" style="font-size:.75rem">${appartsOf(e.id).length} lot${appartsOf(e.id).length>1?'s':''} · ${dh0(cot)}/mois</div></div>
+      ${S.canWrite?`<div class="ft"><button class="icon-btn" data-act="edit-etage" data-id="${e.id}" aria-label="Modifier l'étage">${ICON.edit}</button><button class="icon-btn" data-act="del-etage" data-id="${e.id}" aria-label="Supprimer l'étage">${ICON.trash}</button></div>`:''}</div>
+      <div class="units">${aps.map(a=>{const r=arrears(a,pm);const [c,l]=statusOf(r.months.length);
+        return `<button type="button" class="unit ${c}" data-act="open-appart" data-id="${a.id}"><div class="top"><span class="no">${esc(a.numero)}</span><span class="tag">${esc(a.type||'Appartement')}</span></div><div class="owner">${esc(a.proprietaire||'Propriétaire non renseigné')}</div><div class="top"><span class="chip ${c}">${l}</span><span class="due">${r.montant?dh0(r.montant):''}</span></div></button>`}).join('')}
+        ${S.canWrite&&!q?`<button type="button" class="unit-add" data-act="add-appart" data-etage="${e.id}">${ICON.plus} Ajouter un lot</button>`:''}</div></div>`;
+  }).join('');
+  return head+`<div class="facade"><div class="roof"><div><h2>${esc(S.config.nom||'Mon immeuble')}</h2><div class="sub">${esc([S.config.adresse,S.config.ville].filter(Boolean).join(', ')||'Adresse à renseigner dans Paramètres')}</div></div><div class="sub num">Cotisations : ${dh0(S.apparts.reduce((s,a)=>s+cotis(a),0))} / mois</div></div>${floors}<div class="ground"></div></div>`;
+}
+
+/* ---------- Suivi des cotisations (grille annuelle) ---------- */
+function vSuivi(){
+  const y=S.year, pm=paidMap(); const ets=etagesSorted();
+  const head=`${banner()}<div class="topbar"><div><div class="eyebrow">Cotisations mensuelles</div><h1>Suivi des cotisations ${y}</h1></div><div class="actions">${yearSel()}<button class="btn" data-act="releve" data-id="">${ICON.etats} État imprimable</button><button class="btn" data-act="export" data-t="grille">${ICON.dl} Exporter</button></div></div>
+  <div class="legend"><span><i style="background:var(--ok-bg);border:1px solid var(--ok)"></i>Payé</span><span><i style="background:var(--bad-bg);border:1px solid var(--bad)"></i>Impayé (échu)</span><span><i style="border:1px dashed var(--line)"></i>À venir</span><span>— Avant la date d'effet</span><span>Cliquez une case impayée pour encaisser.</span></div>`;
+  if(!S.apparts.length) return head+`<section class="panel"><div class="empty"><h3>Aucun lot</h3><span>Ajoutez des appartements dans la vue Immeuble.</span></div></section>`;
+  const colTot=Array(12).fill(0); let gTot=0, gDue=0;
+  const row=a=>{const pa=pm.get(a.id)||new Map(); let tot=0, due=0;
+    const cells=MOIS.map((_,i)=>{const k=ym(y,i+1); const pre=k<appDebut(a);
+      if(pa.has(k)){const p=pa.get(k); tot+=cotis(a); colTot[i]+=cotis(a); return `<td><button class="cell paid" data-act="edit-paiement" data-id="${p.id}" title="${esc(keyLong(k))} · payé le ${fdate(p.date)} · reçu ${recuNo(p)}"><span>✓</span></button></td>`;}
+      if(pre) return `<td><button class="cell pre" disabled aria-label="Avant la date d'effet"><span>—</span></button></td>`;
+      if(k<=CUR_KEY){due+=cotis(a);return `<td><button class="cell unpaid" data-act="add-paiement" data-appart="${a.id}" data-mois="${k}" title="${esc(keyLong(k))} · impayé · ${dh(cotis(a))}" ${S.canWrite?'':'disabled'}><span>✗</span></button></td>`;}
+      return `<td><button class="cell future" data-act="add-paiement" data-appart="${a.id}" data-mois="${k}" title="${esc(keyLong(k))} · à venir (paiement anticipé)" ${S.canWrite?'':'disabled'}><span></span></button></td>`;}).join('');
+    gTot+=tot; gDue+=due;
+    return `<tr><td class="stick"><button class="link" data-act="open-appart" data-id="${a.id}">${esc((a.type&&a.type!=='Appartement'?a.type+' ':'')+a.numero)}</button> <span class="muted" style="font-size:.78rem">${esc(a.proprietaire||'')}</span></td>${cells}<td class="tot">${dh0(tot)}</td><td class="tot" style="color:${due?'var(--bad)':'var(--muted)'}">${due?dh0(due):'—'}</td></tr>`;};
+  let body='';
+  ets.forEach(e=>{const aps=appartsOf(e.id); if(!aps.length) return; body+=`<tr class="fl"><td class="stick">${esc(e.nom)}</td><td colspan="14"></td></tr>`+aps.map(row).join('');});
+  const orph=S.apparts.filter(a=>!etById(a.etageId)); if(orph.length) body+=`<tr class="fl"><td class="stick">Sans étage</td><td colspan="14"></td></tr>`+orph.map(row).join('');
+  return head+`<section class="panel"><div class="tbl-wrap"><table class="grid"><thead><tr><th class="stick">Lot · propriétaire</th>${MOIS.map(m=>`<th>${m}</th>`).join('')}<th>Payé</th><th>Impayé</th></tr></thead><tbody>${body}</tbody>
+  <tfoot><tr><td class="stick">Total encaissé</td>${colTot.map(v=>`<td>${v?nf0.format(v):'·'}</td>`).join('')}<td style="text-align:right;padding-right:10px">${dh0(gTot)}</td><td style="text-align:right;padding-right:10px;color:var(--bad)">${gDue?dh0(gDue):'—'}</td></tr></tfoot></table></div></section>`;
+}
+
+/* ---------- États imprimables ---------- */
+function minKey(a,b){return a<b?a:b}
+function buildReleve(a,y,pm){
+  pm=pm||paidMap(); const pa=pm.get(a.id)||new Map(); const c=cotis(a), deb=appDebut(a);
+  const months=MOIS_L.map((lbl,i)=>{const k=ym(y,i+1); const p=pa.get(k)||null; const pre=k<deb;
+    const state=p?'paid':pre?'pre':k<=CUR_KEY?'unpaid':'future'; return {k,lbl,p,state,du:pre?0:c};});
+  const nPaid=months.filter(m=>m.state==='paid').length, nUnpaid=months.filter(m=>m.state==='unpaid').length;
+  const nDue=months.filter(m=>m.state!=='pre'&&m.k<=CUR_KEY).length;
+  const prevUnpaid=monthRange(deb,minKey(ym(y-1,12),CUR_KEY)).filter(k=>!pa.has(k));
+  const pays=S.paiements.filter(p=>p.appartId===a.id&&yearOf(p.date)===y).sort((x,z)=>(x.date||'').localeCompare(z.date||''));
+  const autres=pays.filter(p=>p.type!=='cotisation').reduce((s,p)=>s+(+p.montant||0),0);
+  return {a,y,c,months,nPaid,nUnpaid,nDue,dueY:nDue*c,paidY:nPaid*c,impY:nUnpaid*c,avance:months.filter(m=>m.state==='paid'&&m.k>CUR_KEY).length,
+    prevN:prevUnpaid.length,prev:prevUnpaid.length*c,reste:(prevUnpaid.length+nUnpaid)*c,pays,versements:pays.reduce((s,p)=>s+(+p.montant||0),0),autres,
+    unpaidKeys:[...prevUnpaid,...months.filter(m=>m.state==='unpaid').map(m=>m.k)]};
+}
+function buildGlobal(y){
+  const pm=paidMap(); const rows=appartsSorted().map(a=>buildReleve(a,y,pm));
+  const ok=rows.filter(r=>r.reste===0), late=rows.filter(r=>r.reste>0).sort((x,z)=>z.reste-x.reste);
+  const due=rows.reduce((s,r)=>s+r.dueY,0), paid=rows.reduce((s,r)=>s+r.paidY-r.avance*r.c,0);
+  return {y,rows,ok,late,totPaid:rows.reduce((s,r)=>s+r.paidY,0),totImp:rows.reduce((s,r)=>s+r.reste,0),totImpY:rows.reduce((s,r)=>s+r.impY,0),
+    taux:due?Math.round(paid/due*100):100,arrete:y<NOW.getFullYear()?'31/12/'+y:fdate(TODAY)};
+}
+function etatLabel(r){ if(r.reste===0) return r.avance?'À jour (avance '+r.avance+' mois)':'À jour'; const n=r.unpaidKeys.length; return n+' mois impayé'+(n>1?'s':''); }
+function ppHeader(title,sub,right){
+  const c=S.config;
+  return `<div class="pp-h"><div><h2>${esc(title)}</h2><div class="s">${esc(c.nom||'Syndic de l\'immeuble')}${c.adresse||c.ville?' · '+esc([c.adresse,c.ville].filter(Boolean).join(', ')):''}</div>${c.syndic?`<div class="s">Syndic : ${esc(c.syndic)}${c.telephone?' · '+esc(c.telephone):''}</div>`:''}${sub?`<div class="s">${sub}</div>`:''}</div><div class="r s">${right}</div></div>`;
+}
+function htmlReleve(R){
+  const a=R.a, e=etById(a.etageId);
+  return `<div class="paper">${ppHeader('Relevé de compte copropriétaire','Exercice '+R.y,`Arrêté au <strong>${R.y<NOW.getFullYear()?'31/12/'+R.y:fdate(TODAY)}</strong><br>Édité le ${fdate(TODAY)}`)}
+  <table class="pp" style="margin-bottom:12px"><tbody>
+    <tr><td style="width:24%;color:#5A6472">Lot</td><td><strong>${esc((a.type||'Appartement')+' n° '+a.numero)}</strong>${e?' · '+esc(e.nom):''}</td><td style="width:22%;color:#5A6472">Cotisation mensuelle</td><td class="n r">${dh(R.c)}</td></tr>
+    <tr><td style="color:#5A6472">Propriétaire</td><td><strong>${esc(a.proprietaire||'—')}</strong></td><td style="color:#5A6472">Téléphone</td><td class="n r">${esc(a.telephone||'—')}</td></tr>
+    <tr><td style="color:#5A6472">Occupation</td><td>${esc(a.occupation||'—')}${a.locataire?' · '+esc(a.locataire):''}</td><td style="color:#5A6472">Cotisations dues depuis</td><td class="r">${keyLong(appDebut(a))}</td></tr>
+  </tbody></table>
+  <div class="pp-boxes">
+    <div class="pp-box"><div class="l">Arriérés avant ${R.y}</div><div class="v">${dh(R.prev)}</div></div>
+    <div class="pp-box"><div class="l">Dû ${R.y} à ce jour</div><div class="v">${dh(R.dueY)}</div></div>
+    <div class="pp-box ok"><div class="l">Payé ${R.y} (${R.nPaid} mois)</div><div class="v">${dh(R.paidY)}</div></div>
+    <div class="pp-box ${R.reste?'bad':'ok'}"><div class="l">Reste à payer</div><div class="v">${dh(R.reste)}</div></div>
+  </div>
+  <div class="pp-sec">Détail des cotisations ${R.y}</div>
+  <table class="pp"><thead><tr><th>Mois</th><th class="r">Montant dû</th><th>État</th><th>Payé le</th><th>Reçu n°</th><th>Mode</th></tr></thead><tbody>
+  ${R.months.map(m=>{const cls='st-'+m.state; const st={paid:'Payé',unpaid:'Impayé',pre:'Non dû',future:'À échoir'}[m.state];
+    return `<tr><td style="text-transform:capitalize">${m.lbl} ${R.y}</td><td class="n r">${m.state==='pre'?'—':dh(m.du)}</td><td class="${cls}">${st}</td><td class="n">${m.p?fdate(m.p.date):''}</td><td class="n">${m.p?recuNo(m.p):''}</td><td>${m.p?esc(m.p.mode||''):''}</td></tr>`}).join('')}
+  </tbody><tfoot><tr><td>Total ${R.y}</td><td class="n r">${dh(R.months.reduce((s,m)=>s+m.du,0))}</td><td colspan="4">${R.nPaid} payé${R.nPaid>1?'s':''} · ${R.nUnpaid} impayé${R.nUnpaid>1?'s':''}</td></tr></tfoot></table>
+  ${R.pays.length?`<div class="pp-sec">Versements reçus en ${R.y}</div><table class="pp"><thead><tr><th>Date</th><th>Reçu n°</th><th>Objet</th><th>Mode</th><th class="r">Montant</th></tr></thead><tbody>
+  ${R.pays.map(p=>`<tr><td class="n">${fdate(p.date)}</td><td class="n">${recuNo(p)}</td><td>${p.type==='cotisation'?esc(moisSummary(p.mois)):esc((p.type==='exceptionnel'?'Contribution exceptionnelle':'Autre')+(p.note?' – '+p.note:''))}</td><td>${esc(p.mode||'')}</td><td class="n r">${dh(p.montant)}</td></tr>`).join('')}
+  </tbody><tfoot><tr><td colspan="4">Total des versements</td><td class="n r">${dh(R.versements)}</td></tr></tfoot></table>`:''}
+  ${R.unpaidKeys.length?`<div class="pp-sec">Mois restant à régler</div><div>${R.unpaidKeys.map(keyLong).join(', ')} — soit <strong class="n">${dh(R.reste)}</strong> (${esc(montantLettres(R.reste))}).</div>`:`<div class="pp-sec">Situation</div><div>Le copropriétaire est à jour de ses cotisations au ${R.y<NOW.getFullYear()?'31/12/'+R.y:fdate(TODAY)}.</div>`}
+  <div class="pp-sign"><div>Le copropriétaire</div><div>Le syndic (signature et cachet)</div></div></div>`;
+}
+function htmlGlobal(G){
+  const head=ppHeader('État des cotisations des copropriétaires','Exercice '+G.y+' · '+G.rows.length+' lots',`Arrêté au <strong>${G.arrete}</strong><br>Édité le ${fdate(TODAY)}`);
+  const cell=m=>({paid:'<td class="c st-paid">OK</td>',unpaid:'<td class="c st-unpaid">Dû</td>',pre:'<td class="c st-pre">-</td>',future:'<td class="c st-future"></td>'}[m.state]);
+  return `<div class="paper land">${head}
+  <div class="pp-boxes">
+    <div class="pp-box ok"><div class="l">Lots à jour</div><div class="v">${G.ok.length} / ${G.rows.length}</div></div>
+    <div class="pp-box ${G.late.length?'bad':'ok'}"><div class="l">Lots en retard</div><div class="v">${G.late.length} / ${G.rows.length}</div></div>
+    <div class="pp-box"><div class="l">Cotisations payées ${G.y}</div><div class="v">${dh(G.totPaid)}</div></div>
+    <div class="pp-box ${G.totImp?'bad':'ok'}"><div class="l">Total impayés · recouvrement ${G.taux} %</div><div class="v">${dh(G.totImp)}</div></div>
+  </div>
+  <div class="pp-sec">Copropriétaires à jour (${G.ok.length})</div>
+  ${G.ok.length?`<table class="pp"><thead><tr><th>Lot</th><th>Étage</th><th>Propriétaire</th><th>Téléphone</th><th class="r">Cotisation</th><th class="r">Payé ${G.y}</th><th>Payé jusqu'à</th></tr></thead><tbody>
+  ${G.ok.map(r=>{const last=r.months.filter(m=>m.state==='paid').pop(); return `<tr><td>${esc(r.a.numero)}</td><td>${esc((etById(r.a.etageId)||{}).nom||'')}</td><td>${esc(r.a.proprietaire||'—')}</td><td class="n">${esc(r.a.telephone||'')}</td><td class="n r">${dh(r.c)}</td><td class="n r">${dh(r.paidY)}</td><td>${last?keyLong(last.k):'—'}</td></tr>`}).join('')}
+  </tbody></table>`:'<div class="pp-note">Aucun lot à jour.</div>'}
+  <div class="pp-sec">Copropriétaires en retard (${G.late.length})</div>
+  ${G.late.length?`<table class="pp"><thead><tr><th>Lot</th><th>Étage</th><th>Propriétaire</th><th>Téléphone</th><th>Mois impayés</th><th class="r">Nb</th><th class="r">Reste dû</th></tr></thead><tbody>
+  ${G.late.map(r=>`<tr><td>${esc(r.a.numero)}</td><td>${esc((etById(r.a.etageId)||{}).nom||'')}</td><td>${esc(r.a.proprietaire||'—')}</td><td class="n">${esc(r.a.telephone||'')}</td><td>${esc(r.unpaidKeys.map(keyLabel).join(', '))}</td><td class="n r">${r.unpaidKeys.length}</td><td class="n r st-unpaid">${dh(r.reste)}</td></tr>`).join('')}
+  </tbody><tfoot><tr><td colspan="6">Total des impayés</td><td class="n r">${dh(G.totImp)}</td></tr></tfoot></table>`:'<div class="pp-note">Aucun retard : tous les copropriétaires sont à jour.</div>'}
+  <div class="pp-sec">Tableau mensuel ${G.y}</div>
+  <table class="pp"><thead><tr><th>Lot</th><th>Propriétaire</th>${MOIS.map(m=>`<th class="c">${m}</th>`).join('')}<th class="r">Payé</th><th class="r">Reste dû</th></tr></thead><tbody>
+  ${G.rows.map(r=>`<tr><td>${esc(r.a.numero)}</td><td>${esc(r.a.proprietaire||'—')}</td>${r.months.map(cell).join('')}<td class="n r">${dh0(r.paidY)}</td><td class="n r ${r.reste?'st-unpaid':''}">${r.reste?dh0(r.reste):'-'}</td></tr>`).join('')}
+  </tbody><tfoot><tr><td colspan="14">Totaux</td><td class="n r">${dh0(G.totPaid)}</td><td class="n r">${dh0(G.totImp)}</td></tr></tfoot></table>
+  <div class="pp-note">OK = payé · Dû = échu et impayé · - = avant la date d'effet · case vide = à échoir. Le reste dû inclut les arriérés des années précédentes.</div>
+  <div class="pp-sign"><div>Fait à ${esc(S.config.ville||'……………')}, le ${fdate(TODAY)}</div><div>Le syndic (signature et cachet)</div></div></div>`;
+}
+function vEtats(){
+  const lots=appartsSorted(); const t=S.et.type;
+  if(t==='lot'&&!S.et.lot&&lots.length) S.et.lot='__all';
+  let preview='';
+  if(!lots.length) preview='<div class="empty"><h3>Aucun lot</h3><span>Ajoutez des appartements dans la vue Immeuble.</span></div>';
+  else if(t==='global') preview=htmlGlobal(buildGlobal(S.year));
+  else { const pm=paidMap(); const sel=S.et.lot==='__all'?lots:[apById(S.et.lot)].filter(Boolean); preview=sel.map(a=>htmlReleve(buildReleve(a,S.year,pm))).join(''); }
+  return `<div class="no-print stack">${banner()}<div class="topbar"><div><div class="eyebrow">Documents à imprimer ou à remettre</div><h1>États imprimables</h1></div><div class="actions">${yearSel()}</div></div>
+  <section class="panel"><div class="panel-b et-bar">
+    <div class="field"><label>Document</label><div class="seg" role="group" aria-label="Type d'état"><button data-act="et-type" data-t="global" aria-pressed="${t==='global'}">État global</button><button data-act="et-type" data-t="lot" aria-pressed="${t==='lot'}">Relevé par appartement</button></div></div>
+    ${t==='lot'?`<div class="field" style="flex:1 1 220px"><label for="et-lot">Lot</label><select class="input" id="et-lot"><option value="__all" ${S.et.lot==='__all'?'selected':''}>Tous les lots (une page par lot)</option>${lots.map(a=>`<option value="${a.id}" ${S.et.lot===a.id?'selected':''}>${esc(appLabel(a))} — ${esc(a.proprietaire||'sans nom')}</option>`).join('')}</select></div>`:''}
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-left:auto"><button class="btn primary" data-act="print" ${lots.length?'':'disabled'}>${ICON.etats} Imprimer</button><button class="btn" data-act="pdf" ${lots.length?'':'disabled'}>${ICON.dl} Télécharger en PDF</button></div>
+  </div></section></div>
+  <div class="paper-wrap">${preview}</div>`;
+}
+
+/* ---------- génération PDF ---------- */
+function T(s){return String(s??'').replace(/→/g,'->').replace(/[−–—]/g,'-').replace(/[   ]/g,' ').replace(/[^\x00-\xFF€’Œœ…]/g,'')}
+function pn(x){const v=(+x||0).toFixed(2).split('.');return v[0].replace(/\B(?=(\d{3})+(?!\d))/g,' ')+','+v[1]+' DH'}
+const C_INK=[22,28,36],C_MUT=[90,100,114],C_LINE=[205,212,220],C_OKF=[224,242,232],C_OKT=[28,122,75],C_BADF=[250,227,224],C_BADT=[174,42,33],C_HEAD=[24,33,44];
+function pdfHead(doc,title,sub,right){
+  const W=doc.internal.pageSize.getWidth(), c=S.config;
+  doc.setTextColor(...C_INK); doc.setFont('helvetica','bold'); doc.setFontSize(15); doc.text(T(title),14,17);
+  doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(...C_MUT);
+  let y=22.5; const lines=[(c.nom||"Syndic de l'immeuble")+((c.adresse||c.ville)?' - '+[c.adresse,c.ville].filter(Boolean).join(', '):''), c.syndic?('Syndic : '+c.syndic+(c.telephone?' - '+c.telephone:'')):'', sub].filter(Boolean);
+  lines.forEach(l=>{doc.text(T(l),14,y);y+=4.3});
+  right.forEach((l,i)=>doc.text(T(l),W-14,17+i*4.6,{align:'right'}));
+  doc.setDrawColor(...C_INK); doc.setLineWidth(.6); doc.line(14,y-1.5,W-14,y-1.5);
+  return y+3;
+}
+function pdfBoxes(doc,y,boxes){
+  const W=doc.internal.pageSize.getWidth(), n=boxes.length, gap=3, bw=(W-28-gap*(n-1))/n;
+  boxes.forEach((b,i)=>{const x=14+i*(bw+gap); doc.setDrawColor(...C_LINE); doc.setLineWidth(.25); doc.roundedRect(x,y,bw,15,1,1);
+    doc.setFont('helvetica','bold'); doc.setFontSize(7); doc.setTextColor(...C_MUT); doc.text(T(b[0].toUpperCase()),x+3,y+5);
+    doc.setFont('helvetica','normal'); doc.setFontSize(11.5); doc.setTextColor(...(b[2]==='bad'?C_BADT:b[2]==='ok'?C_OKT:C_INK)); doc.text(T(b[1]),x+3,y+11.5);});
+  doc.setTextColor(...C_INK); return y+20;
+}
+function pdfSec(doc,y,txt){ const H=doc.internal.pageSize.getHeight(); if(y>H-30){doc.addPage();y=18} doc.setFont('helvetica','bold'); doc.setFontSize(10.5); doc.setTextColor(...C_INK); doc.text(T(txt),14,y); return y+2.5; }
+function pdfTable(doc,y,opts){
+  doc.autoTable(Object.assign({startY:y,theme:'grid',margin:{left:14,right:14,bottom:16},
+    styles:{font:'helvetica',fontSize:8.5,cellPadding:1.6,lineColor:C_LINE,lineWidth:.15,textColor:C_INK,overflow:'linebreak'},
+    headStyles:{fillColor:C_HEAD,textColor:255,fontStyle:'bold',fontSize:8},footStyles:{fillColor:[240,243,246],textColor:C_INK,fontStyle:'bold'}},opts));
+  return doc.lastAutoTable.finalY+6;
+}
+function pdfColor(d,state){ if(d.section!=='body') return; if(state==='paid'){d.cell.styles.fillColor=C_OKF;d.cell.styles.textColor=C_OKT;d.cell.styles.fontStyle='bold'} else if(state==='unpaid'){d.cell.styles.fillColor=C_BADF;d.cell.styles.textColor=C_BADT;d.cell.styles.fontStyle='bold'} else if(state==='pre'){d.cell.styles.textColor=[160,168,178]} }
+function pdfFooters(doc){
+  const n=doc.getNumberOfPages();
+  for(let i=1;i<=n;i++){doc.setPage(i);const W=doc.internal.pageSize.getWidth(),H=doc.internal.pageSize.getHeight();
+    doc.setFont('helvetica','normal');doc.setFontSize(7.5);doc.setTextColor(...C_MUT);
+    doc.text(T((S.config.nom||'Registre du Syndic')+' - édité le '+fdate(TODAY)),14,H-8); doc.text('Page '+i+' / '+n,W-14,H-8,{align:'right'});}
+}
+function pdfSign(doc,y,left){ const W=doc.internal.pageSize.getWidth(),H=doc.internal.pageSize.getHeight(); if(y>H-34){doc.addPage();y=24} y+=12;
+  doc.setDrawColor(...C_MUT);doc.setLineWidth(.2);doc.line(14,y,84,y);doc.line(W-84,y,W-14,y);doc.setFont('helvetica','normal');doc.setFontSize(8.5);doc.setTextColor(...C_MUT);
+  doc.text(T(left),14,y+4.5);doc.text(T('Le syndic (signature et cachet)'),W-84,y+4.5); }
+function pdfReleve(doc,R,first){
+  if(!first) doc.addPage('a4','portrait');
+  const a=R.a, e=etById(a.etageId), arr=R.y<NOW.getFullYear()?'31/12/'+R.y:fdate(TODAY);
+  let y=pdfHead(doc,'Relevé de compte copropriétaire','Exercice '+R.y,['Arrêté au '+arr]);
+  y=pdfTable(doc,y,{theme:'plain',styles:{fontSize:9,cellPadding:1.3,textColor:C_INK},columnStyles:{0:{textColor:C_MUT,cellWidth:38},2:{textColor:C_MUT,cellWidth:44},3:{halign:'right'}},
+    body:[['Lot',T((a.type||'Appartement')+' n° '+a.numero+(e?' - '+e.nom:'')),'Cotisation mensuelle',pn(R.c)],['Propriétaire',T(a.proprietaire||'-'),'Téléphone',T(a.telephone||'-')],['Occupation',T((a.occupation||'-')+(a.locataire?' - '+a.locataire:'')),'Cotisations dues depuis',T(keyLong(appDebut(a)))]],
+    didParseCell:d=>{if(d.column.index===1&&d.row.index<2)d.cell.styles.fontStyle='bold'}});
+  y=pdfBoxes(doc,y-2,[['Arriérés avant '+R.y,pn(R.prev)],['Dû '+R.y+' à ce jour',pn(R.dueY)],['Payé '+R.y+' ('+R.nPaid+' mois)',pn(R.paidY),'ok'],['Reste à payer',pn(R.reste),R.reste?'bad':'ok']]);
+  y=pdfSec(doc,y,'Détail des cotisations '+R.y);
+  const st={paid:'Payé',unpaid:'Impayé',pre:'Non dû',future:'À échoir'};
+  y=pdfTable(doc,y,{head:[['Mois','Montant dû','État','Payé le','Reçu n°','Mode']],
+    body:R.months.map(m=>[T(m.lbl.charAt(0).toUpperCase()+m.lbl.slice(1)+' '+R.y),m.state==='pre'?'-':pn(m.du),T(st[m.state]),m.p?fdate(m.p.date):'',m.p?recuNo(m.p):'',T(m.p?m.p.mode||'':'')]),
+    foot:[['Total '+R.y,pn(R.months.reduce((s,m)=>s+m.du,0)),T(R.nPaid+' payé(s) - '+R.nUnpaid+' impayé(s)'),'','','']],
+    columnStyles:{1:{halign:'right'}},didParseCell:d=>{if(d.column.index===2&&d.section==='body')pdfColor(d,R.months[d.row.index].state)}});
+  if(R.pays.length){ y=pdfSec(doc,y,'Versements reçus en '+R.y);
+    y=pdfTable(doc,y,{head:[['Date','Reçu n°','Objet','Mode','Montant']],body:R.pays.map(p=>[fdate(p.date),recuNo(p),T(p.type==='cotisation'?moisSummary(p.mois):(p.type==='exceptionnel'?'Contribution exceptionnelle':'Autre')+(p.note?' - '+p.note:'')),T(p.mode||''),pn(p.montant)]),
+      foot:[['Total des versements','','','',pn(R.versements)]],columnStyles:{4:{halign:'right'}}}); }
+  y=pdfSec(doc,y,R.unpaidKeys.length?'Mois restant à régler':'Situation');
+  doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(...C_INK);
+  const txt=R.unpaidKeys.length?R.unpaidKeys.map(keyLong).join(', ')+' - soit '+pn(R.reste)+' ('+montantLettres(R.reste)+').':'Le copropriétaire est à jour de ses cotisations au '+arr+'.';
+  const lines=doc.splitTextToSize(T(txt),doc.internal.pageSize.getWidth()-28); doc.text(lines,14,y+3); y+=3+lines.length*4.2;
+  pdfSign(doc,y,'Le copropriétaire');
+}
+function pdfGlobal(doc,G){
+  let y=pdfHead(doc,'État des cotisations des copropriétaires','Exercice '+G.y+' - '+G.rows.length+' lots',['Arrêté au '+G.arrete]);
+  y=pdfBoxes(doc,y,[['Lots à jour',G.ok.length+' / '+G.rows.length,'ok'],['Lots en retard',G.late.length+' / '+G.rows.length,G.late.length?'bad':'ok'],['Cotisations payées '+G.y,pn(G.totPaid)],['Total impayés (recouvrement '+G.taux+' %)',pn(G.totImp),G.totImp?'bad':'ok']]);
+  y=pdfSec(doc,y,'Copropriétaires à jour ('+G.ok.length+')');
+  y=G.ok.length?pdfTable(doc,y,{head:[['Lot','Étage','Propriétaire','Téléphone','Cotisation','Payé '+G.y,"Payé jusqu'à"]],
+    body:G.ok.map(r=>{const last=r.months.filter(m=>m.state==='paid').pop();return [T(r.a.numero),T((etById(r.a.etageId)||{}).nom||''),T(r.a.proprietaire||'-'),T(r.a.telephone||''),pn(r.c),pn(r.paidY),T(last?keyLong(last.k):'-')]}),
+    columnStyles:{4:{halign:'right'},5:{halign:'right'}}}):y+6;
+  y=pdfSec(doc,y,'Copropriétaires en retard ('+G.late.length+')');
+  y=G.late.length?pdfTable(doc,y,{head:[['Lot','Étage','Propriétaire','Téléphone','Mois impayés','Nb','Reste dû']],
+    body:G.late.map(r=>[T(r.a.numero),T((etById(r.a.etageId)||{}).nom||''),T(r.a.proprietaire||'-'),T(r.a.telephone||''),T(r.unpaidKeys.map(keyLabel).join(', ')),String(r.unpaidKeys.length),pn(r.reste)]),
+    foot:[['Total des impayés','','','','','',pn(G.totImp)]],columnStyles:{4:{cellWidth:'auto'},5:{halign:'right',cellWidth:10},6:{halign:'right',cellWidth:28}},
+    didParseCell:d=>{if(d.column.index===6&&d.section==='body'){d.cell.styles.textColor=C_BADT;d.cell.styles.fontStyle='bold'}}}):y+6;
+  y=pdfSec(doc,y,'Tableau mensuel '+G.y);
+  const sym={paid:'OK',unpaid:'Dû',pre:'-',future:''};
+  y=pdfTable(doc,y,{head:[['Lot','Propriétaire',...MOIS.map(T),'Payé','Reste dû']],
+    body:G.rows.map(r=>[T(r.a.numero),T(r.a.proprietaire||'-'),...r.months.map(m=>T(sym[m.state])),pn(r.paidY).replace(',00',''),r.reste?pn(r.reste).replace(',00',''):'-']),
+    foot:[['Totaux','','','','','','','','','','','','','',pn(G.totPaid).replace(',00',''),pn(G.totImp).replace(',00','')]],
+    styles:{fontSize:7.5,cellPadding:1.2,lineColor:C_LINE,lineWidth:.15,textColor:C_INK},headStyles:{fillColor:C_HEAD,textColor:255,fontSize:7.5,halign:'center'},
+    columnStyles:Object.assign({0:{cellWidth:12},1:{cellWidth:'auto'},14:{halign:'right',cellWidth:22},15:{halign:'right',cellWidth:22}},Object.fromEntries(MOIS.map((_,i)=>[i+2,{halign:'center',cellWidth:11}]))),
+    didParseCell:d=>{if(d.section==='body'&&d.column.index>=2&&d.column.index<14)pdfColor(d,G.rows[d.row.index].months[d.column.index-2].state); if(d.section==='body'&&d.column.index===15&&G.rows[d.row.index].reste){d.cell.styles.textColor=C_BADT;d.cell.styles.fontStyle='bold'}}});
+  doc.setFont('helvetica','normal');doc.setFontSize(7.5);doc.setTextColor(...C_MUT);
+  doc.text(T("OK = payé - Dû = échu et impayé - '-' = avant la date d'effet - case vide = à échoir. Le reste dû inclut les arriérés des années précédentes."),14,y-2);
+  pdfSign(doc,y,'Fait à '+(S.config.ville||'..............')+', le '+fdate(TODAY));
+}
+function slug(s){return String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^\w]+/g,'-').replace(/^-|-$/g,'').toLowerCase()||'immeuble'}
+async function exportEtat(kind){
+  const lots=appartsSorted(); if(!lots.length) return; const y=S.year, name=slug(S.config.nom);
+  const sel=S.et.type==='global'?null:(S.et.lot==='__all'||!S.et.lot?lots:[apById(S.et.lot)].filter(Boolean));
+  const fname=S.et.type==='global'?`etat-global-cotisations-${y}-${name}`:(sel.length===1?`releve-${slug(sel[0].numero)}-${slug(sel[0].proprietaire)}-${y}`:`releves-tous-lots-${y}-${name}`);
+  if(kind==='html'){
+    const body=S.et.type==='global'?htmlGlobal(buildGlobal(y)):sel.map(a=>htmlReleve(buildReleve(a,y))).join('');
+    const css=[...document.querySelectorAll('style')].map(s=>s.textContent).join('\n');
+    const page=`<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(fname)}</title><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700&family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;500&display=swap"><style>${css}
+html,body{background:#E9ECEF!important;color:#161C24}body{padding:20px}.bar{max-width:1120px;margin:0 auto 14px;display:flex;justify-content:flex-end}.bar button{font:600 14px system-ui;padding:9px 16px;border-radius:7px;border:0;background:#1D58A6;color:#fff;cursor:pointer}
+@page{size:A4 ${S.et.type==='global'?'landscape':'portrait'};margin:12mm}@media print{html,body{background:#fff!important;padding:0}.bar{display:none}.paper{box-shadow:none;max-width:none;padding:0;margin:0}.paper+.paper{break-before:page;margin-top:0}tr{break-inside:avoid}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style></head><body><div class="bar"><button onclick="window.print()">Imprimer</button></div>${body}</body></html>`;
+    return saveFile(fname+'.html',page);
+  }
+  const J=window.jspdf&&window.jspdf.jsPDF;
+  if(!J||!J.API||!J.API.autoTable){ toast("Le générateur PDF n'a pas pu se charger. Utilisez la version HTML."); return; }
+  try{
+    let doc;
+    if(S.et.type==='global'){ doc=new J({orientation:'landscape',unit:'mm',format:'a4'}); pdfGlobal(doc,buildGlobal(y)); }
+    else { doc=new J({orientation:'portrait',unit:'mm',format:'a4'}); const pm=paidMap(); sel.forEach((a,i)=>pdfReleve(doc,buildReleve(a,y,pm),i===0)); }
+    pdfFooters(doc);
+    await saveFile(fname+'.pdf',doc.output('blob'));
+  }catch(e){ console.error(e); toast("La création du PDF a échoué. Utilisez la version HTML."); }
+}
+
+/* ---------- Paiements ---------- */
+function filteredPaiements(){
+  const f=S.fp, q=f.q.toLowerCase();
+  return S.paiements.filter(p=>{const a=apById(p.appartId);
+    if(f.appart&&p.appartId!==f.appart) return false;
+    if(f.mois&&!(p.date||'').startsWith(f.mois)) return false;
+    if(f.mode&&p.mode!==f.mode) return false;
+    if(q&&![a&&a.numero,a&&a.proprietaire,p.note,p.mode,recuNo(p),p.reference].some(x=>String(x||'').toLowerCase().includes(q))) return false;
+    return true;}).sort((a,b)=>(b.date||'').localeCompare(a.date||'')||(+b.recu||0)-(+a.recu||0));
+}
+function vPaiements(){
+  const rows=filteredPaiements(); const tot=rows.reduce((s,p)=>s+(+p.montant||0),0);
+  return `${banner()}<div class="topbar"><div><div class="eyebrow">Encaissements des copropriétaires</div><h1>Paiements</h1></div><div class="actions"><button class="btn" data-act="export" data-t="paiements">${ICON.dl} Exporter</button>${wbtn('add-paiement',ICON.plus+' Nouveau paiement','','btn primary')}</div></div>
+  <section class="panel"><div class="panel-h"><div class="filters" style="flex:1">
+    <input class="input search" id="fp-q" type="search" placeholder="Rechercher (n° reçu, propriétaire, note…)" value="${esc(S.fp.q)}">
+    <select class="input" id="fp-appart"><option value="">Tous les lots</option>${appartsSorted().map(a=>`<option value="${a.id}" ${S.fp.appart===a.id?'selected':''}>${esc(appLabel(a))}</option>`).join('')}</select>
+    <input class="input" id="fp-mois" type="month" value="${esc(S.fp.mois)}" aria-label="Mois du paiement">
+    <select class="input" id="fp-mode"><option value="">Tous modes</option>${MODES.map(m=>`<option ${S.fp.mode===m?'selected':''}>${m}</option>`).join('')}</select>
+  </div></div>
+  ${rows.length?`<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Reçu</th><th>Date</th><th>Lot</th><th>Propriétaire</th><th>Objet</th><th>Mode</th><th class="r">Montant</th><th></th></tr></thead><tbody>
+  ${rows.map(p=>{const a=apById(p.appartId);return `<tr><td class="mono">${recuNo(p)}${exBadge(p)}</td><td class="mono">${fdate(p.date)}</td><td>${a?`<button class="link" data-act="open-appart" data-id="${a.id}">${esc(a.numero)}</button>`:'<span class="muted">Lot supprimé</span>'}</td><td>${esc(a?a.proprietaire:'')}</td><td>${p.type==='cotisation'?esc(moisSummary(p.mois)):`<span class="tag">${esc(p.type==='exceptionnel'?'Contribution exceptionnelle':'Autre')}</span> ${esc(p.note||'')}`}</td><td>${esc(p.mode||'')}</td><td class="r num">${dh(p.montant)}</td>
+  <td><div class="row-actions"><button class="icon-btn" data-act="recu" data-id="${p.id}" aria-label="Voir le reçu" title="Reçu">${ICON.recu}</button>${S.canWrite?`<button class="icon-btn" data-act="edit-paiement" data-id="${p.id}" aria-label="Modifier">${ICON.edit}</button><button class="icon-btn" data-act="del-paiement" data-id="${p.id}" aria-label="Supprimer">${ICON.trash}</button>`:''}</div></td></tr>`}).join('')}
+  </tbody><tfoot><tr><td colspan="6">${rows.length} paiement${rows.length>1?'s':''}</td><td class="r num">${dh(tot)}</td><td></td></tr></tfoot></table></div>`:`<div class="empty"><h3>Aucun paiement</h3><span>${S.paiements.length?'Aucun paiement ne correspond aux filtres.':'Enregistrez le premier versement d\'un copropriétaire.'}</span></div>`}
+  </section>`;
+}
+
+/* ---------- Dépenses ---------- */
+function filteredDepenses(){
+  const f=S.fd,q=f.q.toLowerCase();
+  return S.depenses.filter(d=>{ if(f.cat&&d.categorie!==f.cat) return false; if(f.mois&&!(d.date||'').startsWith(f.mois)) return false;
+    if(q&&![d.libelle,d.fournisseur,d.piece,d.note,d.categorie].some(x=>String(x||'').toLowerCase().includes(q))) return false; return true;})
+    .sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+}
+function vDepenses(){
+  const rows=filteredDepenses(); const tot=rows.reduce((s,d)=>s+(+d.montant||0),0);
+  return `${banner()}<div class="topbar"><div><div class="eyebrow">Frais de l'immeuble</div><h1>Dépenses</h1></div><div class="actions"><button class="btn" data-act="export" data-t="depenses">${ICON.dl} Exporter</button>${wbtn('add-depense',ICON.plus+' Nouvelle dépense','','btn primary')}</div></div>
+  <section class="panel"><div class="panel-h"><div class="filters" style="flex:1">
+    <input class="input search" id="fd-q" type="search" placeholder="Rechercher (libellé, fournisseur, n° facture…)" value="${esc(S.fd.q)}">
+    <select class="input" id="fd-cat"><option value="">Tous les postes</option>${CATS.map(c=>`<option ${S.fd.cat===c?'selected':''}>${esc(c)}</option>`).join('')}</select>
+    <input class="input" id="fd-mois" type="month" value="${esc(S.fd.mois)}" aria-label="Mois de la dépense">
+  </div></div>
+  ${rows.length?`<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Date</th><th>Poste</th><th>Libellé</th><th>Fournisseur</th><th>Pièce</th><th>Mode</th><th class="r">Montant</th><th></th></tr></thead><tbody>
+  ${rows.map(d=>`<tr><td class="mono">${fdate(d.date)}</td><td><span class="tag">${esc(d.categorie||'Divers')}</span></td><td>${esc(d.libelle||'')}${exBadge(d)}</td><td>${esc(d.fournisseur||'')}</td><td class="mono">${esc(d.piece||'')}</td><td>${esc(d.mode||'')}</td><td class="r num">${dh(d.montant)}</td><td><div class="row-actions">${S.canWrite?`<button class="icon-btn" data-act="edit-depense" data-id="${d.id}" aria-label="Modifier">${ICON.edit}</button><button class="icon-btn" data-act="del-depense" data-id="${d.id}" aria-label="Supprimer">${ICON.trash}</button>`:''}</div></td></tr>`).join('')}
+  </tbody><tfoot><tr><td colspan="6">${rows.length} dépense${rows.length>1?'s':''}</td><td class="r num">${dh(tot)}</td><td></td></tr></tfoot></table></div>`:`<div class="empty"><h3>Aucune dépense</h3><span>${S.depenses.length?'Aucune dépense ne correspond aux filtres.':'Saisissez les factures d\'électricité, de nettoyage, d\'entretien…'}</span></div>`}
+  </section>`;
+}
+
+/* ---------- Paramètres ---------- */
+function vParametres(){
+  const c=S.config;
+  return `${banner()}<div class="topbar"><div><div class="eyebrow">Copropriété</div><h1>Paramètres</h1></div></div>
+  <section class="panel"><div class="panel-h"><h2>Immeuble et syndic</h2>${wbtn('edit-config',ICON.edit+' Modifier')}</div><div class="panel-b">
+  <dl class="dl"><dt>Nom de l'immeuble</dt><dd>${esc(c.nom||'—')}</dd><dt>Adresse</dt><dd>${esc([c.adresse,c.ville].filter(Boolean).join(', ')||'—')}</dd><dt>Syndic</dt><dd>${esc(c.syndic||'—')}</dd><dt>Téléphone</dt><dd class="mono">${esc(c.telephone||'—')}</dd>
+  <dt>Cotisation par défaut</dt><dd class="num">${dh(c.cotisationDefaut||0)} / mois</dd><dt>Début des cotisations</dt><dd>${c.debut?keyLong(c.debut):'—'}</dd><dt>Solde initial de caisse</dt><dd class="num">${dh(c.soldeInitial||0)}</dd></dl></div></section>
+  <section class="panel"><div class="panel-h"><h2>Exporter les données</h2></div><div class="panel-b" style="display:flex;gap:8px;flex-wrap:wrap">
+    <button class="btn" data-act="export" data-t="paiements">${ICON.dl} Paiements (CSV)</button><button class="btn" data-act="export" data-t="depenses">${ICON.dl} Dépenses (CSV)</button><button class="btn" data-act="export" data-t="grille">${ICON.dl} Grille ${S.year} (CSV)</button><button class="btn" data-act="export" data-t="lots">${ICON.dl} Copropriétaires (CSV)</button></div></section>
+  ${sectionAcces()}
+  ${[...S.etages,...S.apparts,...S.paiements,...S.depenses].some(x=>x.exemple)?`<section class="panel"><div class="panel-h"><h2>Données d'exemple</h2>${wbtn('clear-examples','Supprimer les exemples','','btn danger')}</div><div class="panel-b muted">Les éléments marqués « exemple » servent de démonstration. Les lots et opérations que vous avez saisis ou modifiés ne sont pas touchés.</div></section>`:''}`;
+}
+
+/* ================= modales ================= */
+const M = document.getElementById('modal');
+let lastFocus=null;
+function openModal(html,wide){ lastFocus=document.activeElement; M.innerHTML=`<div class="sheet${wide?' wide':''}" role="dialog" aria-modal="true">${html}</div>`; M.hidden=false; document.body.style.overflow='hidden'; const f=M.querySelector('input:not([type=hidden]):not([disabled]),select,textarea,button.primary'); if(f) setTimeout(()=>f.focus(),20); }
+function closeModal(){ M.hidden=true; M.innerHTML=''; document.body.style.overflow=''; PF=null; if(lastFocus&&lastFocus.focus) try{lastFocus.focus()}catch(e){} }
+function sheetHead(t,sub){ return `<div class="sheet-h"><div>${sub?`<div class="eyebrow">${sub}</div>`:''}<h2>${t}</h2></div><button class="icon-btn" data-act="close" aria-label="Fermer">${ICON.close}</button></div>`; }
+function confirmBox(title,msg,onYes,label='Supprimer'){
+  openModal(`${sheetHead(title)}<div class="sheet-b"><p style="margin:0">${msg}</p></div><div class="sheet-f"><button class="btn" data-act="close">Annuler</button><button class="btn primary" id="cf-yes" style="background:var(--bad);border-color:var(--bad);color:#fff">${label}</button></div>`);
+  document.getElementById('cf-yes').onclick=async()=>{ document.getElementById('cf-yes').disabled=true; await onYes(); closeModal(); };
+}
+function fval(f,n){const el=f.elements[n];return el?el.value.trim():''}
+
+/* étage */
+function formEtage(e={}){
+  const nextOrd = S.etages.length? Math.max(...S.etages.map(x=>+x.ordre||0))+1 : 0;
+  openModal(`${sheetHead(e.id?'Modifier l\'étage':'Nouvel étage','Immeuble')}<form id="f-etage"><div class="sheet-b"><div class="form-grid">
+    <div class="field"><label for="et-nom">Nom</label><input class="input" id="et-nom" name="nom" required value="${esc(e.nom||(nextOrd===0?'Rez-de-chaussée':nextOrd+(nextOrd===1?'er':'e')+' étage'))}"></div>
+    <div class="field"><label for="et-ordre">Niveau (0 = RDC, −1 = sous-sol)</label><input class="input num" id="et-ordre" name="ordre" type="number" step="1" required value="${esc(e.ordre??nextOrd)}"></div>
+  </div></div><div class="sheet-f"><button type="button" class="btn" data-act="close">Annuler</button><button class="btn primary">Enregistrer</button></div></form>`);
+  document.getElementById('f-etage').onsubmit=async ev=>{ev.preventDefault();const f=ev.target;
+    const d={nom:fval(f,'nom'),ordre:+fval(f,'ordre')||0};
+    if(await guard(()=>e.id?Store.set('etages',e.id,d):Store.add('etages',d), e.id?'Étage modifié':'Étage ajouté')) closeModal();};
+}
+/* appartement */
+function formAppart(a={},etageId){
+  const c=S.config;
+  openModal(`${sheetHead(a.id?'Modifier le lot':'Nouveau lot', a.id?esc(appLabel(a)):'Immeuble')}<form id="f-app"><div class="sheet-b"><div class="form-grid">
+    <div class="field"><label for="ap-num">Numéro</label><input class="input" id="ap-num" name="numero" required value="${esc(a.numero||'')}" placeholder="ex. 12 ou A3"></div>
+    <div class="field"><label for="ap-type">Type de lot</label><select class="input" id="ap-type" name="type">${TYPES_LOT.map(t=>`<option ${(a.type||'Appartement')===t?'selected':''}>${t}</option>`).join('')}</select></div>
+    <div class="field"><label for="ap-et">Étage</label><select class="input" id="ap-et" name="etageId" required>${etagesSorted().map(e=>`<option value="${e.id}" ${(a.etageId||etageId)===e.id?'selected':''}>${esc(e.nom)}</option>`).join('')}</select></div>
+    <div class="field"><label for="ap-occ">Occupation</label><select class="input" id="ap-occ" name="occupation">${['Propriétaire occupant','Loué','Vacant'].map(t=>`<option ${(a.occupation||'Propriétaire occupant')===t?'selected':''}>${t}</option>`).join('')}</select></div>
+    <div class="field full"><label for="ap-prop">Propriétaire</label><input class="input" id="ap-prop" name="proprietaire" value="${esc(a.proprietaire||'')}" placeholder="Nom et prénom"></div>
+    <div class="field"><label for="ap-tel">Téléphone</label><input class="input" id="ap-tel" name="telephone" type="tel" value="${esc(a.telephone||'')}"></div>
+    <div class="field"><label for="ap-loc">Locataire (si loué)</label><input class="input" id="ap-loc" name="locataire" value="${esc(a.locataire||'')}"></div>
+    <div class="field"><label for="ap-cot">Cotisation mensuelle (DH)</label><input class="input num" id="ap-cot" name="cotisation" type="number" min="0" step="0.01" required value="${esc(a.cotisation??c.cotisationDefaut??'')}"></div>
+    <div class="field"><label for="ap-deb">Cotisations dues à partir de</label><input class="input" id="ap-deb" name="debut" type="month" required value="${esc(a.debut||c.debut||ym(S.year,1))}"></div>
+    <div class="field"><label for="ap-sup">Superficie (m²)</label><input class="input num" id="ap-sup" name="superficie" type="number" min="0" step="0.01" value="${esc(a.superficie||'')}"></div>
+    <div class="field"><label for="ap-tit">N° titre foncier</label><input class="input" id="ap-tit" name="titre" value="${esc(a.titre||'')}"></div>
+    <div class="field full"><label for="ap-note">Note</label><textarea class="input" id="ap-note" name="note">${esc(a.note||'')}</textarea></div>
+  </div></div><div class="sheet-f">${a.id?`<button type="button" class="btn danger" data-act="del-appart" data-id="${a.id}" style="margin-right:auto">${ICON.trash} Supprimer</button>`:''}<button type="button" class="btn" data-act="close">Annuler</button><button class="btn primary">Enregistrer</button></div></form>`);
+  document.getElementById('f-app').onsubmit=async ev=>{ev.preventDefault();const f=ev.target;
+    const d={numero:fval(f,'numero'),type:fval(f,'type'),etageId:fval(f,'etageId'),occupation:fval(f,'occupation'),proprietaire:fval(f,'proprietaire'),telephone:fval(f,'telephone'),locataire:fval(f,'locataire'),cotisation:+fval(f,'cotisation')||0,debut:fval(f,'debut'),superficie:fval(f,'superficie')?+fval(f,'superficie'):'',titre:fval(f,'titre'),note:fval(f,'note')};
+    if(await guard(()=>a.id?Store.set('apparts',a.id,d):Store.add('apparts',d), a.id?'Lot modifié':'Lot ajouté')) closeModal();};
+}
+/* fiche appartement */
+function ficheAppart(id){
+  const a=apById(id); if(!a) return; const pm=paidMap(); const r=arrears(a,pm); const [c,l]=statusOf(r.months.length);
+  const ps=S.paiements.filter(p=>p.appartId===id).sort((x,y)=>(y.date||'').localeCompare(x.date||''));
+  const totP=ps.reduce((s,p)=>s+(+p.montant||0),0);
+  openModal(`${sheetHead(esc(appLabel(a)),esc(a.type||'Appartement'))}<div class="sheet-b">
+   <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center"><span class="chip ${c}">${l}</span><span class="num" style="font-size:1.1rem;color:${r.montant?'var(--bad)':'var(--ok)'}">${r.montant?'Reste dû : '+dh(r.montant):'Rien à payer à ce jour'}</span></div>
+   <dl class="dl"><dt>Propriétaire</dt><dd>${esc(a.proprietaire||'—')}</dd><dt>Téléphone</dt><dd class="mono">${esc(a.telephone||'—')}</dd><dt>Occupation</dt><dd>${esc(a.occupation||'—')}${a.locataire?' · '+esc(a.locataire):''}</dd><dt>Cotisation</dt><dd class="num">${dh(cotis(a))} / mois depuis ${keyLong(appDebut(a))}</dd>${a.superficie?`<dt>Superficie</dt><dd class="num">${esc(a.superficie)} m²</dd>`:''}${a.titre?`<dt>Titre foncier</dt><dd>${esc(a.titre)}</dd>`:''}${a.note?`<dt>Note</dt><dd>${esc(a.note)}</dd>`:''}</dl>
+   ${r.months.length?`<div><div class="eyebrow" style="margin-bottom:6px">Mois impayés (${r.months.length})</div><div class="mlist">${r.months.map(k=>`<span class="chip bad">${keyLabel(k)}</span>`).join('')}</div></div>`:''}
+   <div><div class="eyebrow" style="margin-bottom:4px">Historique des paiements · ${dh(totP)}</div>${ps.length?`<div class="tbl-wrap"><table class="tbl"><tbody>${ps.map(p=>`<tr><td class="mono">${fdate(p.date)}</td><td>${p.type==='cotisation'?esc(moisSummary(p.mois)):esc(p.type==='exceptionnel'?'Contribution exceptionnelle':'Autre')}</td><td class="r num">${dh(p.montant)}</td><td class="r"><button class="icon-btn" data-act="recu" data-id="${p.id}" aria-label="Reçu">${ICON.recu}</button></td></tr>`).join('')}</tbody></table></div>`:'<p class="muted" style="margin:4px 0 0">Aucun paiement enregistré.</p>'}</div>
+  </div><div class="sheet-f"><button class="btn" data-act="releve" data-id="${a.id}" style="margin-right:auto">${ICON.etats} Relevé imprimable</button>${wbtn('edit-appart',ICON.edit+' Modifier',`data-id="${a.id}"`)}${wbtn('add-paiement',ICON.plus+' Encaisser',`data-appart="${a.id}" ${r.months.length?'data-unpaid="1"':''}`,'btn primary')}</div>`,true);
+}
+
+/* paiement */
+let PF=null;
+function formPaiement(p={},opts={}){
+  const isNew=!p.id;
+  PF={id:p.id||null, appartId:p.appartId||opts.appart||'', type:p.type||'cotisation', sel:new Set(p.mois||[]), manual:!isNew, year:S.year};
+  if(opts.mois){PF.sel.add(opts.mois);PF.year=+opts.mois.slice(0,4)}
+  else if(PF.sel.size) PF.year=+[...PF.sel].sort()[0].slice(0,4);
+  if(opts.unpaid && PF.appartId){ const a=apById(PF.appartId); const r=arrears(a); r.months.forEach(k=>PF.sel.add(k)); if(r.months.length) PF.year=+r.months[0].slice(0,4); }
+  openModal(`${sheetHead(isNew?'Encaisser un paiement':'Modifier le paiement', isNew?'Reçu n° '+String(nextRecu()).padStart(4,'0'):'Reçu n° '+recuNo(p))}<form id="f-pay"><div class="sheet-b"><div class="form-grid">
+    <div class="field full"><label for="pf-app">Lot</label><select class="input" id="pf-app" name="appartId" required><option value="">Choisir un lot…</option>${etagesSorted().map(e=>`<optgroup label="${esc(e.nom)}">${appartsOf(e.id).map(a=>`<option value="${a.id}" ${PF.appartId===a.id?'selected':''}>${esc((a.type&&a.type!=='Appartement'?a.type+' ':'Appt ')+a.numero)} — ${esc(a.proprietaire||'sans nom')}</option>`).join('')}</optgroup>`).join('')}</select></div>
+    <div class="field"><label for="pf-type">Objet</label><select class="input" id="pf-type" name="type"><option value="cotisation" ${PF.type==='cotisation'?'selected':''}>Cotisation mensuelle</option><option value="exceptionnel" ${PF.type==='exceptionnel'?'selected':''}>Contribution exceptionnelle (travaux…)</option><option value="autre" ${PF.type==='autre'?'selected':''}>Autre recette</option></select></div>
+    <div class="field"><label for="pf-date">Date de paiement</label><input class="input" id="pf-date" name="date" type="date" required value="${esc(p.date||TODAY)}"></div>
+    <div class="field full" id="pf-months-wrap"></div>
+    <div class="field"><label for="pf-montant">Montant (DH)</label><input class="input num" id="pf-montant" name="montant" type="number" min="0" step="0.01" required value="${esc(p.montant??'')}"></div>
+    <div class="field"><label for="pf-mode">Mode de paiement</label><select class="input" id="pf-mode" name="mode">${MODES.map(m=>`<option ${(p.mode||'Espèces')===m?'selected':''}>${m}</option>`).join('')}</select></div>
+    <div class="field"><label for="pf-ref">Référence (n° chèque, virement)</label><input class="input" id="pf-ref" name="reference" value="${esc(p.reference||'')}"></div>
+    <div class="field"><label for="pf-note">Note</label><input class="input" id="pf-note" name="note" value="${esc(p.note||'')}"></div>
+  </div><div id="pf-hint" class="note-box" hidden></div></div><div class="sheet-f"><button type="button" class="btn" data-act="close">Annuler</button><button class="btn primary">${isNew?'Enregistrer le paiement':'Enregistrer'}</button></div></form>`,true);
+  renderPF();
+  const f=document.getElementById('f-pay');
+  f.elements.appartId.onchange=e=>{PF.appartId=e.target.value;PF.sel.clear();PF.manual=false;renderPF()};
+  f.elements.type.onchange=e=>{PF.type=e.target.value;PF.manual=PF.type!=='cotisation';renderPF()};
+  f.elements.montant.oninput=()=>{PF.manual=true};
+  f.onsubmit=async ev=>{ev.preventDefault();
+    if(PF.type==='cotisation'&&!PF.sel.size){ toast('Cochez au moins un mois couvert par ce paiement.'); return; }
+    const d={appartId:fval(f,'appartId'),type:PF.type,date:fval(f,'date'),mois:PF.type==='cotisation'?[...PF.sel].sort():[],montant:+fval(f,'montant')||0,mode:fval(f,'mode'),reference:fval(f,'reference'),note:fval(f,'note'),recu:p.recu||nextRecu()};
+    const id=PF.id; let newId=null;
+    const ok=await guard(async()=>{ if(id) await Store.set('paiements',id,d); else newId=await Store.add('paiements',d); }, id?'Paiement modifié':'Paiement enregistré · reçu n° '+String(d.recu).padStart(4,'0'));
+    if(ok){ closeModal(); }
+  };
+}
+function renderPF(){
+  const w=document.getElementById('pf-months-wrap'); if(!w||!PF) return;
+  const a=apById(PF.appartId); const hint=document.getElementById('pf-hint');
+  if(PF.type!=='cotisation'){ w.innerHTML=''; w.hidden=true; hint.hidden=true; return; }
+  w.hidden=false;
+  if(!a){ w.innerHTML='<label>Mois couverts</label><div class="note-box">Choisissez d\'abord le lot.</div>'; hint.hidden=true; return; }
+  const pm=paidMap(); const paid=pm.get(a.id)||new Map(); const deb=appDebut(a); const y=PF.year;
+  const chips=MOIS.map((m,i)=>{const k=ym(y,i+1); const other=paid.has(k)&&paid.get(k).id!==PF.id; const pre=k<deb; const due=!other&&!pre&&k<=CUR_KEY;
+    return `<div class="mchip ${due&&!PF.sel.has(k)?'due':''}"><input type="checkbox" id="pm-${k}" data-k="${k}" ${PF.sel.has(k)||other?'checked':''} ${other||pre?'disabled':''}><label for="pm-${k}">${m}<small>${other?'payé':pre?'—':due?'dû':'à venir'}</small></label></div>`}).join('');
+  const r=arrears(a,pm); const unpaidNotSel=r.months.filter(k=>!PF.sel.has(k));
+  w.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><label>Mois couverts · ${dh(cotis(a))}/mois</label><div style="display:flex;gap:6px;align-items:center">${unpaidNotSel.length?`<button type="button" class="btn sm" id="pf-all">Tous les impayés (${r.months.length})</button>`:''}<div class="year-sel"><button type="button" class="icon-btn" id="pf-yp" aria-label="Année précédente">${ICON.left}</button><span>${y}</span><button type="button" class="icon-btn" id="pf-yn" aria-label="Année suivante">${ICON.right}</button></div></div></div><div class="months">${chips}</div>`;
+  w.querySelectorAll('input[data-k]').forEach(cb=>cb.onchange=()=>{const k=cb.dataset.k; if(cb.checked)PF.sel.add(k); else PF.sel.delete(k); updAmount(a); renderPF();});
+  document.getElementById('pf-yp').onclick=()=>{PF.year--;renderPF()}; document.getElementById('pf-yn').onclick=()=>{PF.year++;renderPF()};
+  const all=document.getElementById('pf-all'); if(all) all.onclick=()=>{r.months.forEach(k=>PF.sel.add(k));updAmount(a);renderPF()};
+  updAmount(a);
+  const sel=[...PF.sel].sort();
+  if(sel.length){ hint.hidden=false; hint.innerHTML=`<strong>${sel.length} mois</strong> sélectionné${sel.length>1?'s':''} : ${esc(moisSummary(sel))} — attendu <span class="num">${dh(sel.length*cotis(a))}</span>`; } else hint.hidden=true;
+}
+function updAmount(a){ if(PF.manual) return; const el=document.getElementById('pf-montant'); if(el) el.value=(PF.sel.size*cotis(a)).toFixed(2); }
+
+/* dépense */
+function formDepense(d={}){
+  openModal(`${sheetHead(d.id?'Modifier la dépense':'Nouvelle dépense','Frais de l\'immeuble')}<form id="f-dep"><div class="sheet-b"><div class="form-grid">
+    <div class="field"><label for="fd-date-i">Date</label><input class="input" id="fd-date-i" name="date" type="date" required value="${esc(d.date||TODAY)}"></div>
+    <div class="field"><label for="fd-cat-i">Poste de dépense</label><select class="input" id="fd-cat-i" name="categorie">${CATS.map(c=>`<option ${(d.categorie||CATS[0])===c?'selected':''}>${esc(c)}</option>`).join('')}</select></div>
+    <div class="field full"><label for="fd-lib">Libellé</label><input class="input" id="fd-lib" name="libelle" required value="${esc(d.libelle||'')}" placeholder="ex. Facture électricité escaliers – septembre"></div>
+    <div class="field"><label for="fd-four">Fournisseur / bénéficiaire</label><input class="input" id="fd-four" name="fournisseur" value="${esc(d.fournisseur||'')}"></div>
+    <div class="field"><label for="fd-mt">Montant TTC (DH)</label><input class="input num" id="fd-mt" name="montant" type="number" min="0" step="0.01" required value="${esc(d.montant??'')}"></div>
+    <div class="field"><label for="fd-mode-i">Mode de règlement</label><select class="input" id="fd-mode-i" name="mode">${MODES.map(m=>`<option ${(d.mode||'Espèces')===m?'selected':''}>${m}</option>`).join('')}</select></div>
+    <div class="field"><label for="fd-piece">N° facture / pièce</label><input class="input" id="fd-piece" name="piece" value="${esc(d.piece||'')}"></div>
+    <div class="field full"><label for="fd-note-i">Note</label><textarea class="input" id="fd-note-i" name="note">${esc(d.note||'')}</textarea></div>
+  </div></div><div class="sheet-f"><button type="button" class="btn" data-act="close">Annuler</button><button class="btn primary">Enregistrer</button></div></form>`);
+  document.getElementById('f-dep').onsubmit=async ev=>{ev.preventDefault();const f=ev.target;
+    const o={date:fval(f,'date'),categorie:fval(f,'categorie'),libelle:fval(f,'libelle'),fournisseur:fval(f,'fournisseur'),montant:+fval(f,'montant')||0,mode:fval(f,'mode'),piece:fval(f,'piece'),note:fval(f,'note')};
+    if(await guard(()=>d.id?Store.set('depenses',d.id,o):Store.add('depenses',o), d.id?'Dépense modifiée':'Dépense enregistrée')) closeModal();};
+}
+/* configuration */
+function formConfig(){
+  const c=S.config;
+  openModal(`${sheetHead('Immeuble et syndic','Paramètres')}<form id="f-cfg"><div class="sheet-b"><div class="form-grid">
+    <div class="field full"><label for="cf-nom">Nom de l'immeuble / résidence</label><input class="input" id="cf-nom" name="nom" value="${esc(c.nom||'')}" placeholder="ex. Résidence Al Amal – Immeuble B"></div>
+    <div class="field"><label for="cf-adr">Adresse</label><input class="input" id="cf-adr" name="adresse" value="${esc(c.adresse||'')}"></div>
+    <div class="field"><label for="cf-ville">Ville</label><input class="input" id="cf-ville" name="ville" value="${esc(c.ville||'')}"></div>
+    <div class="field"><label for="cf-syn">Syndic (nom)</label><input class="input" id="cf-syn" name="syndic" value="${esc(c.syndic||'')}"></div>
+    <div class="field"><label for="cf-tel">Téléphone du syndic</label><input class="input" id="cf-tel" name="telephone" value="${esc(c.telephone||'')}"></div>
+    <div class="field"><label for="cf-cot">Cotisation mensuelle par défaut (DH)</label><input class="input num" id="cf-cot" name="cotisationDefaut" type="number" min="0" step="0.01" value="${esc(c.cotisationDefaut??'')}"></div>
+    <div class="field"><label for="cf-deb">Début des cotisations</label><input class="input" id="cf-deb" name="debut" type="month" value="${esc(c.debut||ym(S.year,1))}"></div>
+    <div class="field"><label for="cf-sol">Solde initial de caisse (DH)</label><input class="input num" id="cf-sol" name="soldeInitial" type="number" step="0.01" value="${esc(c.soldeInitial??0)}"></div>
+  </div><p class="muted" style="margin:0;font-size:.82rem">La cotisation par défaut s'applique aux lots qui n'ont pas leur propre montant. Le solde initial correspond à l'argent en caisse avant la première saisie.</p></div><div class="sheet-f"><button type="button" class="btn" data-act="close">Annuler</button><button class="btn primary">Enregistrer</button></div></form>`);
+  document.getElementById('f-cfg').onsubmit=async ev=>{ev.preventDefault();const f=ev.target;
+    const d={...c,nom:fval(f,'nom'),adresse:fval(f,'adresse'),ville:fval(f,'ville'),syndic:fval(f,'syndic'),telephone:fval(f,'telephone'),cotisationDefaut:+fval(f,'cotisationDefaut')||0,debut:fval(f,'debut'),soldeInitial:+fval(f,'soldeInitial')||0};
+    if(await guard(()=>Store.setConfig(d),'Paramètres enregistrés')) closeModal();};
+}
+/* assistant de structure */
+function formGenerate(){
+  const c=S.config;
+  openModal(`${sheetHead('Générer la structure','Assistant')}<form id="f-gen"><div class="sheet-b"><div class="form-grid">
+    <div class="field"><label for="g-ss">Sous-sols</label><input class="input num" id="g-ss" name="ss" type="number" min="0" max="5" value="0"></div>
+    <div class="field"><label for="g-rdc">Rez-de-chaussée</label><select class="input" id="g-rdc" name="rdc"><option value="1">Oui</option><option value="0">Non</option></select></div>
+    <div class="field"><label for="g-et">Nombre d'étages au-dessus du RDC</label><input class="input num" id="g-et" name="et" type="number" min="0" max="60" value="4" required></div>
+    <div class="field"><label for="g-ap">Lots par niveau</label><input class="input num" id="g-ap" name="ap" type="number" min="1" max="30" value="2" required></div>
+    <div class="field"><label for="g-num">Numérotation</label><select class="input" id="g-num" name="num"><option value="seq">Continue (1, 2, 3…)</option><option value="etage">Par étage (11, 12, 21, 22…)</option></select></div>
+    <div class="field"><label for="g-cot">Cotisation mensuelle (DH)</label><input class="input num" id="g-cot" name="cot" type="number" min="0" step="0.01" value="${esc(c.cotisationDefaut||200)}" required></div>
+  </div><div class="note-box" id="g-prev"></div></div><div class="sheet-f"><button type="button" class="btn" data-act="close">Annuler</button><button class="btn primary" id="g-go">Créer</button></div></form>`);
+  const f=document.getElementById('f-gen');
+  const plan=()=>{const ss=+f.elements.ss.value||0,rdc=f.elements.rdc.value==='1',et=+f.elements.et.value||0,ap=Math.max(1,+f.elements.ap.value||1);
+    const lv=[];for(let i=ss;i>=1;i--)lv.push({nom:'Sous-sol '+(ss>1?i:''),ordre:-i});if(rdc)lv.push({nom:'Rez-de-chaussée',ordre:0});for(let i=1;i<=et;i++)lv.push({nom:i+(i===1?'er':'e')+' étage',ordre:i});
+    lv.forEach(l=>l.nom=l.nom.trim()); return {lv,ap};};
+  const prev=()=>{const {lv,ap}=plan();document.getElementById('g-prev').innerHTML=`Création de <strong>${lv.length} niveaux</strong> et <strong>${lv.length*ap} lots</strong>. Les étages existants sont conservés.`;};
+  f.oninput=prev; prev();
+  f.onsubmit=async ev=>{ev.preventDefault(); const {lv,ap}=plan(); const cot=+f.elements.cot.value||0; const mode=f.elements.num.value; const btn=document.getElementById('g-go'); btn.disabled=true; btn.textContent='Création…';
+    let seq=S.apparts.reduce((m,a)=>Math.max(m,parseInt(a.numero)||0),0);
+    const ok=await guard(async()=>{
+      if(!S.config.cotisationDefaut){ await Store.setConfig({...S.config,cotisationDefaut:cot,debut:S.config.debut||ym(S.year,1)}); }
+      for(const l of lv){ const eid=await Store.add('etages',l);
+        for(let j=1;j<=ap;j++){ const numero = mode==='etage' ? (l.ordre<0?'S'+(-l.ordre):l.ordre===0?'R':String(l.ordre))+j : String(++seq);
+          await Store.add('apparts',{numero,type:l.ordre<0?'Garage':'Appartement',etageId:eid,occupation:'Propriétaire occupant',proprietaire:'',telephone:'',locataire:'',cotisation:cot,debut:S.config.debut||ym(S.year,1),superficie:'',titre:'',note:''}); } }
+    },'Structure créée');
+    if(ok){ closeModal(); S.view='immeuble'; schedule(); } };
+}
+/* reçu */
+function recuHtml(p){
+  const a=apById(p.appartId)||{}; const c=S.config;
+  return `<div class="recu"><div class="recu-h"><div><div class="eyebrow">Reçu de paiement</div><h2>${esc(c.nom||'Syndic de l\'immeuble')}</h2><div class="muted" style="font-size:.82rem">${esc([c.adresse,c.ville].filter(Boolean).join(', '))}${c.syndic?'<br>Syndic : '+esc(c.syndic):''}${c.telephone?' · '+esc(c.telephone):''}</div></div><div style="text-align:right"><div class="eyebrow">N°</div><div class="big">${recuNo(p)}</div><div class="mono" style="font-size:.85rem">${fdate(p.date)}</div></div></div>
+  <dl class="dl"><dt>Reçu de</dt><dd><strong>${esc(a.proprietaire||'—')}</strong></dd><dt>Lot</dt><dd>${esc(appLabel(apById(p.appartId)))}</dd><dt>Objet</dt><dd>${p.type==='cotisation'?'Cotisation de syndic — '+esc(moisSummary(p.mois)):esc(p.type==='exceptionnel'?'Contribution exceptionnelle':'Autre recette')}${p.note?' · '+esc(p.note):''}</dd><dt>Mode</dt><dd>${esc(p.mode||'')}${p.reference?' · réf. '+esc(p.reference):''}</dd></dl>
+  <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;border-top:1px solid var(--line);padding-top:10px"><div class="lettres" style="max-width:46ch">Arrêté le présent reçu à la somme de : ${esc(montantLettres(p.montant))}.</div><div class="big">${dh(p.montant)}</div></div>
+  <div class="muted" style="font-size:.78rem;text-align:right;padding-top:18px">Signature et cachet du syndic</div></div>`;
+}
+function showRecu(id){ const p=S.paiements.find(x=>x.id===id); if(!p) return;
+  openModal(`${sheetHead('Reçu n° '+recuNo(p),'Paiement')}<div class="sheet-b">${recuHtml(p)}</div><div class="sheet-f"><button class="btn" data-act="dl-recu" data-id="${p.id}">${ICON.dl} Télécharger le reçu</button><button class="btn primary" data-act="close">Fermer</button></div>`,true); }
+
+/* ================= exports ================= */
+function csv(rows){ return '﻿'+rows.map(r=>r.map(v=>{const s=String(v??'');return /[";\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s}).join(';')).join('\r\n'); }
+const num2=v=>(+v||0).toFixed(2).replace('.',',');
+async function saveFile(filename,data){
+  try{
+    const type=filename.endsWith('.csv')?'text/csv;charset=utf-8':filename.endsWith('.html')?'text/html;charset=utf-8':filename.endsWith('.pdf')?'application/pdf':'application/octet-stream';
+    const blob=data instanceof Blob?data:new Blob([data],{type});
+    const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=filename; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),5000); toast('Fichier téléchargé');
+  }catch(e){ toast("Le téléchargement n'a pas abouti."); }
+}
+function doExport(t){
+  const name=(S.config.nom||'immeuble').replace(/[^\w\-]+/g,'-').toLowerCase();
+  if(t==='paiements') return saveFile(`paiements-${name}.csv`,csv([['N° reçu','Date','Lot','Étage','Propriétaire','Objet','Mois couverts','Mode','Référence','Montant (DH)','Note'],...[...S.paiements].sort((a,b)=>(a.date||'').localeCompare(b.date||'')).map(p=>{const a=apById(p.appartId)||{};return [recuNo(p),fdate(p.date),a.numero||'',(etById(a.etageId)||{}).nom||'',a.proprietaire||'',p.type,(p.mois||[]).join(' '),p.mode,p.reference||'',num2(p.montant),p.note||'']})]));
+  if(t==='depenses') return saveFile(`depenses-${name}.csv`,csv([['Date','Poste','Libellé','Fournisseur','N° pièce','Mode','Montant (DH)','Note'],...[...S.depenses].sort((a,b)=>(a.date||'').localeCompare(b.date||'')).map(d=>[fdate(d.date),d.categorie,d.libelle,d.fournisseur||'',d.piece||'',d.mode,num2(d.montant),d.note||''])]));
+  if(t==='lots'){ const pm=paidMap(); return saveFile(`coproprietaires-${name}.csv`,csv([['Étage','Lot','Type','Propriétaire','Téléphone','Occupation','Locataire','Cotisation (DH)','Début','Mois impayés','Montant dû (DH)'],...appartsSorted().map(a=>{const r=arrears(a,pm);return [(etById(a.etageId)||{}).nom||'',a.numero,a.type||'',a.proprietaire||'',a.telephone||'',a.occupation||'',a.locataire||'',num2(cotis(a)),a.debut||'',r.months.length,num2(r.montant)]})])); }
+  if(t==='grille'){ const pm=paidMap(),y=S.year; return saveFile(`suivi-cotisations-${y}-${name}.csv`,csv([['Étage','Lot','Propriétaire',...MOIS,'Payé (DH)','Impayé (DH)'],...appartsSorted().map(a=>{const pa=pm.get(a.id)||new Map();let p=0,u=0;const cells=MOIS.map((_,i)=>{const k=ym(y,i+1);if(pa.has(k)){p+=cotis(a);return 'Payé'}if(k<appDebut(a))return '—';if(k<=CUR_KEY){u+=cotis(a);return 'Impayé'}return ''});return [(etById(a.etageId)||{}).nom||'',a.numero,a.proprietaire||'',...cells,num2(p),num2(u)]})])); }
+}
+
+/* ================= actions ================= */
+document.addEventListener('click',async e=>{
+  if(e.target===M){ closeModal(); return; }
+  const b=e.target.closest('[data-act]'); if(!b||b.disabled) return;
+  const act=b.dataset.act, id=b.dataset.id;
+  switch(act){
+    case 'nav': S.view=b.dataset.v; try{localStorage.setItem('syndic-view',S.view)}catch(x){} closeModal(); if(S.view==='parametres'&&!A.accesLoaded) loadAcces(); render(); window.scrollTo(0,0); break;
+    case 'auth-tab': A.tab=b.dataset.t; A.msg=''; paintAuth(true); break;
+    case 'logout': await SB.auth.signOut(); A.tab='login'; A.msg=''; break;
+    case 'retry': afterLogin(); break;
+    case 'new-imm': formNewImm(); break;
+    case 'print': { const st=document.getElementById('page-size')||document.head.appendChild(Object.assign(document.createElement('style'),{id:'page-size'})); st.textContent='@page{size:A4 '+(S.et.type==='global'?'landscape':'portrait')+';margin:12mm}'; window.print(); break; }
+    case 'copy-url': { const u=siteUrl(); try{ await navigator.clipboard.writeText(u); toast('Lien copié'); }catch(x){ const r=document.createRange(); r.selectNodeContents(document.getElementById('site-url')); const sl=getSelection(); sl.removeAllRanges(); sl.addRange(r); toast('Lien sélectionné : copiez-le avec Ctrl+C'); } break; }
+    case 'del-membre': { const m=A.membres.find(x=>x.user_id===id); confirmBox('Retirer l\'accès',`Retirer l'accès de ${esc(m?m.email:'')} à cet immeuble ?`,async()=>{ const {error}=await SB.from('syndic_membres').delete().eq('immeuble_id',IMM).eq('user_id',id); if(error) toast('Échec : '+error.message); else { toast('Accès retiré'); await loadAcces(); } },'Retirer'); break; }
+    case 'del-invit': { const {error}=await SB.from('syndic_invitations').delete().eq('immeuble_id',IMM).eq('email',id); if(error) toast('Échec : '+error.message); else { toast('Invitation annulée'); loadAcces(); } break; }
+    case 'leave-imm': confirmBox('Quitter l\'immeuble','Vous ne verrez plus cet immeuble. Le syndic devra vous inviter de nouveau pour y revenir.',async()=>{ const {error}=await SB.from('syndic_membres').delete().eq('immeuble_id',IMM).eq('user_id',A.user.id); if(error) toast('Échec : '+error.message); else { try{localStorage.removeItem('syndic-imm')}catch(x){} await Store.loadImmeubles(); toast('Vous avez quitté l\'immeuble'); } },'Quitter'); break;
+    case 'del-imm': { const nom=S.config.nom||'cet immeuble'; confirmBox('Supprimer l\'immeuble',`Supprimer définitivement <strong>${esc(nom)}</strong> avec ses ${S.apparts.length} lots, ${S.paiements.length} paiements et ${S.depenses.length} dépenses ? Cette action est irréversible.`,async()=>{ const {data,error}=await SB.from('syndic_immeubles').delete().eq('id',IMM).select('id'); if(error||!data||!data.length) toast('Suppression impossible'+(error?' : '+error.message:'')); else { try{localStorage.removeItem('syndic-imm')}catch(x){} await Store.loadImmeubles(); S.view='tableau'; toast('Immeuble supprimé'); } },'Supprimer définitivement'); break; }
+    case 'year': S.year+=+b.dataset.d; render(); break;
+    case 'imm-mode': S.immMode=b.dataset.m; render(); break;
+    case 'close': closeModal(); break;
+    case 'add-etage': formEtage(); break;
+    case 'edit-etage': formEtage(etById(id)); break;
+    case 'del-etage': { const n=appartsOf(id).length; const et=etById(id);
+      if(n){ toast(`${et.nom} contient ${n} lot${n>1?'s':''} : déplacez-les ou supprimez-les d'abord.`); break; }
+      confirmBox('Supprimer l\'étage',`Supprimer « ${esc(et.nom)} » ?`,()=>guard(()=>Store.del('etages',id),'Étage supprimé')); break; }
+    case 'add-appart': if(!S.etages.length){toast('Créez d\'abord un étage.');break;} formAppart({},b.dataset.etage); break;
+    case 'edit-appart': formAppart(apById(id)); break;
+    case 'open-appart': ficheAppart(id); break;
+    case 'del-appart': { const a=apById(id); const ps=S.paiements.filter(p=>p.appartId===id);
+      confirmBox('Supprimer le lot',`Supprimer ${esc(appLabel(a))}${a.proprietaire?' ('+esc(a.proprietaire)+')':''} ?${ps.length?` Ses <strong>${ps.length} paiement${ps.length>1?'s':''}</strong> seront aussi supprimés.`:''}`,
+        ()=>guard(async()=>{for(const p of ps) await Store.del('paiements',p.id); await Store.del('apparts',id);},'Lot supprimé')); break; }
+    case 'add-paiement': if(!S.apparts.length){toast('Ajoutez d\'abord des lots dans la vue Immeuble.');break;} formPaiement({},{appart:b.dataset.appart,mois:b.dataset.mois,unpaid:!!b.dataset.unpaid}); break;
+    case 'edit-paiement': { const p=S.paiements.find(x=>x.id===id); if(!p) break; if(!S.canWrite){showRecu(id);break;} formPaiement(p); break; }
+    case 'del-paiement': { const p=S.paiements.find(x=>x.id===id); confirmBox('Supprimer le paiement',`Supprimer le reçu n° ${recuNo(p)} de ${dh(p.montant)} ? Les mois couverts redeviendront impayés.`,()=>guard(()=>Store.del('paiements',id),'Paiement supprimé')); break; }
+    case 'recu': showRecu(id); break;
+    case 'dl-recu': { const p=S.paiements.find(x=>x.id===id); if(!p)break; const css=[...document.querySelectorAll('style')].map(s=>s.textContent).join('\n');
+      saveFile(`recu-${recuNo(p)}.html`,`<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Reçu ${recuNo(p)}</title><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700&family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@500&display=swap"><style>${css}\nbody{padding:32px;max-width:720px;margin:0 auto}</style></head><body>${recuHtml(p)}</body></html>`); break; }
+    case 'add-depense': formDepense(); break;
+    case 'edit-depense': formDepense(S.depenses.find(x=>x.id===id)); break;
+    case 'del-depense': { const d=S.depenses.find(x=>x.id===id); confirmBox('Supprimer la dépense',`Supprimer « ${esc(d.libelle)} » de ${dh(d.montant)} ?`,()=>guard(()=>Store.del('depenses',id),'Dépense supprimée')); break; }
+    case 'edit-config': formConfig(); break;
+    case 'et-type': S.et.type=b.dataset.t; render(); break;
+    case 'releve': S.view='etats'; if(id){S.et.type='lot';S.et.lot=id}else{S.et.type='global'} closeModal(); render(); window.scrollTo(0,0); break;
+    case 'pdf': b.disabled=true; await exportEtat('pdf'); b.disabled=false; break;
+    case 'html-print': exportEtat('html'); break;
+    case 'gen-structure': formGenerate(); break;
+    case 'export': doExport(b.dataset.t); break;
+    case 'clear-examples': {
+      const items=[...COLS.flatMap(c=>S[c].filter(x=>x.exemple).map(x=>[c,x.id]))];
+      confirmBox('Supprimer les exemples',`${items.length} éléments d'exemple seront supprimés (étages, lots, paiements, dépenses). Vos propres saisies sont conservées.`,
+        ()=>guard(async()=>{ for(const c of ['paiements','depenses','apparts','etages']) for(const [cc,i] of items) if(cc===c) await Store.del(c,i);
+          if(S.config.exemple){ const {exemple,...rest}=S.config; await Store.setConfig({...rest,nom:'',adresse:'',ville:'',syndic:'',telephone:''}); } },'Exemples supprimés'),'Tout supprimer'); break; }
+  }
+});
+document.addEventListener('input',e=>{
+  const t=e.target; if(!t.id) return;
+  if(t.id==='imm-q'){S.immQ=t.value;schedule()}
+  else if(t.id==='fp-q'){S.fp.q=t.value;schedule()} else if(t.id==='fd-q'){S.fd.q=t.value;schedule()}
+});
+document.addEventListener('change',e=>{
+  const t=e.target; const map={'fp-appart':['fp','appart'],'fp-mois':['fp','mois'],'fp-mode':['fp','mode'],'fd-cat':['fd','cat'],'fd-mois':['fd','mois']};
+  if(map[t.id]){ const [o,k]=map[t.id]; S[o][k]=t.value; schedule(); }
+  else if(t.id==='et-lot'){ S.et.lot=t.value; schedule(); }
+  else if(t.id==='imm-switch'){ Store.open(t.value).catch(err=>{S.mode='error';A.err=err.message;schedule()}); S.view=S.view||'tableau'; }
+});
+document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&!M.hidden) closeModal(); });
+document.addEventListener('submit',async e=>{
+  const f=e.target;
+  if(f.id==='f-first'){ e.preventDefault(); const nom=f.elements.nom.value.trim(); f.querySelector('button').disabled=true; try{ await Store.createImmeuble(nom); S.view='immeuble'; toast('Immeuble créé'); }catch(err){ toast('La création a échoué : '+(err.message||'erreur')); f.querySelector('button').disabled=false; } }
+  if(f.id==='f-invite'){ e.preventDefault(); const email=f.elements.email.value.trim().toLowerCase(), role=f.elements.role.value;
+    if(email===(A.user.email||'').toLowerCase()){ toast('C\'est votre propre adresse.'); return; }
+    const {error}=await SB.from('syndic_invitations').upsert({immeuble_id:IMM,email,role});
+    if(error) toast('Invitation impossible : '+error.message); else { toast('Invitation enregistrée. Envoyez le lien du site à '+email); await loadAcces(); } }
+});
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden&&A.user&&IMM&&S.mode==='db'&&M.hidden) Store.reload().catch(()=>{}); });
+
+let tt=0; function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.hidden=false; clearTimeout(tt); tt=setTimeout(()=>t.hidden=true,3200); }
+
+render();
+authInit();
+})();
+</script>
+</body>
+</html>
