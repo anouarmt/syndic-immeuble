@@ -402,127 +402,121 @@ const S = {
 try{ const v=localStorage.getItem('syndic-view'); if(v && VIEWS.some(x=>x[0]===v)) S.view=v; }catch(e){}
 try{ const h=location.hash.slice(1); if(VIEWS.some(x=>x[0]===h)) S.view=h; }catch(e){}
 
-/* ================= stockage : Supabase ================= */
+/* ================= stockage : Supabase, accès par code ================= */
 const CFG = window.SYNDIC_CONFIG || {};
-const SB = (window.supabase && CFG.url && CFG.key && !/VOTRE/.test(CFG.url)) ? window.supabase.createClient(CFG.url, CFG.key, {auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}}) : null;
-const A = { ready:false, user:null, imms:[], role:null, recovery:false, tab:'login', msg:'', msgOk:false, busy:false, membres:[], invitations:[], accesLoaded:false, err:'' };
+const SB = (window.supabase && CFG.url && CFG.key && !/VOTRE/.test(CFG.url)) ? window.supabase.createClient(CFG.url, CFG.key, {auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}}) : null;
+const A = { ready:false, keys:[], imms:[], role:null, code:null, msg:'', busy:false, adding:false, err:'' };
 let IMM = null;
-const ROLE_LBL = {owner:'Propriétaire du compte', gestionnaire:'Gestionnaire', lecteur:'Lecture seule'};
+const ROLE_LBL = {admin:'Administrateur', gestion:'Gestion', lecture:'Lecture seule'};
+const RANK = {admin:3, gestion:2, lecture:1};
 function denied(){ const e=new Error('denied'); e.code='denied'; return e; }
+function savedCodes(){ try{ const v=JSON.parse(localStorage.getItem('syndic-codes')||'[]'); return Array.isArray(v)?v.filter(x=>typeof x==='string'):[] }catch(e){ return [] } }
+function storeCodes(list){ try{ localStorage.setItem('syndic-codes',JSON.stringify([...new Set(list)])) }catch(e){} }
+async function rpc(fn,args){ const {data,error}=await SB.rpc(fn,args); if(error) throw error; return data; }
+function mergeKeys(){
+  const m=new Map();
+  A.keys.forEach(k=>k.imms.forEach(i=>{ const cur=m.get(i.id); if(!cur||RANK[k.role]>RANK[cur.role]) m.set(i.id,{id:i.id,nom:i.nom,role:k.role,code:k.code}); }));
+  A.imms=[...m.values()];
+}
+async function openCode(code){
+  const r=await rpc('syndic_ouvrir',{p_code:code});
+  if(!r||r.erreur) return r||{erreur:'code'};
+  A.keys=A.keys.filter(k=>k.code!==code); A.keys.push({code,role:r.role,imms:r.immeubles||[]});
+  storeCodes([...savedCodes(),code]); mergeKeys(); return r;
+}
 const Store = {
-  async loadImmeubles(){
-    const {data:imms,error}=await SB.from('syndic_immeubles').select('id,nom,owner,data,created_at').order('created_at');
-    if(error) throw error;
-    const {data:mem}=await SB.from('syndic_membres').select('immeuble_id,role').eq('user_id',A.user.id);
-    const roles=new Map((mem||[]).map(m=>[m.immeuble_id,m.role]));
-    A.imms=(imms||[]).map(i=>({...i, role: i.owner===A.user.id?'owner':(roles.get(i.id)||'lecteur')}));
+  async start(){
+    const codes=savedCodes(); A.keys=[]; const ok=[];
+    for(const c of codes){ try{ const r=await rpc('syndic_ouvrir',{p_code:c}); if(r&&!r.erreur){ A.keys.push({code:c,role:r.role,imms:r.immeubles||[]}); ok.push(c); } else if(r&&r.erreur==='bloque'){ ok.push(c); } }catch(e){ ok.push(c); throw e; } }
+    storeCodes(ok); mergeKeys();
     let want=null; try{want=localStorage.getItem('syndic-imm')}catch(e){}
     const pick=A.imms.find(i=>i.id===want)||A.imms[0]||null;
     await this.open(pick?pick.id:null);
   },
   async open(id){
-    IMM=id; A.accesLoaded=false; A.membres=[]; A.invitations=[];
-    try{ if(id) localStorage.setItem('syndic-imm',id) }catch(e){}
+    IMM=id; try{ if(id) localStorage.setItem('syndic-imm',id) }catch(e){}
     COLS.forEach(c=>S[c]=[]); S.config={}; S.loaded={};
     const imm=A.imms.find(i=>i.id===id);
-    if(!imm){ S.mode='none'; S.canWrite=false; schedule(); return; }
-    A.role=imm.role; S.canWrite = imm.role==='owner'||imm.role==='gestionnaire';
-    S.config={...(imm.data||{}), nom: imm.nom||''};
+    if(!imm){ IMM=null; A.role=null; A.code=null; S.canWrite=false; S.mode=A.keys.some(k=>k.role==='admin')?'none':'code'; schedule(); return; }
+    A.role=imm.role; A.code=imm.code; S.canWrite = imm.role==='admin'||imm.role==='gestion';
     S.mode='loading'; schedule();
-    await this.reload();
-    if(S.view==='parametres') loadAcces();
+    await this.reload(true);
   },
-  async reload(){
+  async reload(first){
     if(!IMM) return;
-    const all=[]; let from=0;
-    for(;;){ const {data,error}=await SB.from('syndic_docs').select('id,col,data').eq('immeuble_id',IMM).range(from,from+999); if(error) throw error; all.push(...data); if(data.length<1000) break; from+=1000; }
+    const r=await rpc('syndic_charger',{p_code:A.code,p_imm:IMM});
+    if(!r){ // code modifié entre-temps : on l'oublie sur cet appareil
+      storeCodes(savedCodes().filter(c=>c!==A.code)); A.keys=A.keys.filter(k=>k.code!==A.code); mergeKeys();
+      if(first){ toast("Le code de cet immeuble a changé : saisissez le nouveau code."); }
+      return this.open((A.imms[0]||{}).id||null);
+    }
+    A.role=r.role; S.canWrite=r.role==='admin'||r.role==='gestion';
+    const im=r.immeuble||{}; S.config={...(im.data||{}), nom:im.nom||''}; S.hasLecture=!!im.lecture;
+    const it=A.imms.find(i=>i.id===IMM); if(it) it.nom=im.nom||'';
     COLS.forEach(c=>S[c]=[]);
-    all.forEach(r=>{ if(S[r.col]) S[r.col].push({id:r.id,...r.data}); });
+    (r.docs||[]).forEach(d=>{ if(S[d.col]) S[d.col].push({id:d.id,...d.data}); });
     S.loaded={config:true,etages:true,apparts:true,paiements:true,depenses:true}; S.mode='db'; schedule();
   },
-  async add(col,data){ const {data:r,error}=await SB.from('syndic_docs').insert({immeuble_id:IMM,col,data}).select('id').single(); if(error) throw error; S[col]=[...S[col],{id:r.id,...data}]; schedule(); return r.id; },
-  async set(col,id,data){ const {data:r,error}=await SB.from('syndic_docs').update({data,updated_at:new Date().toISOString()}).eq('id',id).select('id'); if(error) throw error; if(!r||!r.length) throw denied(); S[col]=S[col].map(x=>x.id===id?{id,...data}:x); schedule(); },
-  async del(col,id){ const {data:r,error}=await SB.from('syndic_docs').delete().eq('id',id).select('id'); if(error) throw error; if(!r||!r.length) throw denied(); S[col]=S[col].filter(x=>x.id!==id); schedule(); },
-  async setConfig(data){ const {nom='',...rest}=data; const {data:r,error}=await SB.from('syndic_immeubles').update({nom,data:rest}).eq('id',IMM).select('id'); if(error) throw error; if(!r||!r.length) throw denied(); S.config={...data}; const i=A.imms.find(x=>x.id===IMM); if(i){i.nom=nom;i.data=rest} schedule(); },
-  async createImmeuble(nom){
-    const {data:r,error}=await SB.from('syndic_immeubles').insert({nom,data:{debut:ym(NOW.getFullYear(),1),cotisationDefaut:0,soldeInitial:0}}).select('id,nom,owner,data,created_at').single();
-    if(error) throw error; A.imms.push({...r,role:'owner'}); await this.open(r.id); return r.id;
+  async add(col,data){ const id=await rpc('syndic_doc_ajouter',{p_code:A.code,p_imm:IMM,p_col:col,p_data:data}); if(!id) throw denied(); S[col]=[...S[col],{id,...data}]; schedule(); return id; },
+  async set(col,id,data){ const r=await rpc('syndic_doc_modifier',{p_code:A.code,p_imm:IMM,p_id:id,p_data:data}); if(!r) throw denied(); S[col]=S[col].map(x=>x.id===id?{id,...data}:x); schedule(); },
+  async del(col,id){ const r=await rpc('syndic_doc_supprimer',{p_code:A.code,p_imm:IMM,p_id:id}); if(!r) throw denied(); S[col]=S[col].filter(x=>x.id!==id); schedule(); },
+  async setConfig(data){ const {nom='',...rest}=data; const r=await rpc('syndic_config_modifier',{p_code:A.code,p_imm:IMM,p_nom:nom,p_data:rest}); if(!r) throw denied(); S.config={...data}; const i=A.imms.find(x=>x.id===IMM); if(i) i.nom=nom; schedule(); },
+  async createImmeuble(nom,gestion,lecture){
+    const adm=A.keys.find(k=>k.role==='admin'); if(!adm) throw denied();
+    const id=await rpc('syndic_imm_creer',{p_admin:adm.code,p_nom:nom,p_gestion:gestion,p_lecture:lecture||''});
+    if(!id){ const e=new Error('Ce code de gestion ou de lecture est déjà utilisé, ou trop court (6 caractères minimum).'); throw e; }
+    adm.imms.push({id,nom}); mergeKeys(); await this.open(id); return id;
   }
 };
 async function guard(fn,okMsg){
-  if(!S.canWrite){ toast("Vous avez un accès en lecture seule à cet immeuble."); return false; }
+  if(!S.canWrite){ toast("Votre code donne un accès en lecture seule à cet immeuble."); return false; }
   try{ await fn(); if(okMsg) toast(okMsg); return true; }
   catch(e){
     console.error(e);
-    if(e&&e.code==='denied') toast("Modification refusée : votre accès à cet immeuble est en lecture seule.");
+    if(e&&e.code==='denied') toast("Modification refusée : le code a peut-être été changé. Rechargez la page.");
     else if(navigator.onLine===false) toast("Pas de connexion internet. Réessayez quand la connexion revient.");
     else toast("L'enregistrement a échoué : "+((e&&e.message)||'erreur inconnue'));
     return false;
   }
 }
-async function loadAcces(){
-  if(!IMM||A.role!=='owner'){ A.accesLoaded=true; schedule(); return; }
-  const [m,i]=await Promise.all([SB.from('syndic_membres').select('user_id,email,role').eq('immeuble_id',IMM).order('created_at'),SB.from('syndic_invitations').select('email,role').eq('immeuble_id',IMM).order('created_at')]);
-  A.membres=m.data||[]; A.invitations=i.data||[]; A.accesLoaded=true; schedule();
-}
 
-/* ================= authentification ================= */
-let lastUid;
-function authInit(){
+/* ================= écran du code d'accès ================= */
+async function appInit(){
   if(!SB){ A.ready=true; schedule(); return; }
-  SB.auth.onAuthStateChange((ev,session)=>{
-    if(ev==='PASSWORD_RECOVERY') A.recovery=true;
-    A.user=session?session.user:null; A.ready=true;
-    const uid=A.user?A.user.id:null;
-    if(uid!==lastUid){ lastUid=uid; setTimeout(afterLogin,0); } else schedule();
-  });
+  try{ await Store.start(); }catch(e){ console.error(e); S.mode='error'; A.err=(e&&e.message)||'Erreur de connexion'; }
+  A.ready=true; schedule();
 }
-async function afterLogin(){
-  if(!A.user){ A.imms=[]; IMM=null; S.mode='auth'; schedule(); return; }
-  S.mode='loading'; schedule();
-  try{ await SB.rpc('syndic_accepter_invitations'); }catch(e){}
-  try{ await Store.loadImmeubles(); }
-  catch(e){ console.error(e); S.mode='error'; A.err=(e&&e.message)||'Erreur inconnue'; schedule(); }
-}
-const AUTH_ERR = {invalid_credentials:'E-mail ou mot de passe incorrect.', email_not_confirmed:"Confirmez d'abord votre adresse e-mail grâce au lien reçu par e-mail.", user_already_exists:'Un compte existe déjà avec cet e-mail. Connectez-vous.', weak_password:'Mot de passe trop faible : 8 caractères minimum, avec lettres et chiffres.', over_email_send_rate_limit:"Trop d'e-mails envoyés. Patientez quelques minutes.", over_request_rate_limit:'Trop de tentatives. Patientez quelques minutes.'};
-function authErr(e){ return AUTH_ERR[e&&e.code] || ((e&&e.message)||'Une erreur est survenue.'); }
-function siteUrl(){ return location.origin+location.pathname; }
-function authScreen(){
+function codeScreen(){
   const brand=`<div class="auth-brand"><svg class="brand-mark" viewBox="0 0 34 40" aria-hidden="true"><rect x="3" y="4" width="28" height="35" rx="2" fill="var(--accent)"/><rect x="0" y="1" width="34" height="5" rx="1.5" fill="var(--roof)"/><g fill="var(--accent-ink)" opacity=".9"><rect x="8" y="10" width="6" height="5"/><rect x="20" y="10" width="6" height="5"/><rect x="8" y="19" width="6" height="5"/><rect x="20" y="19" width="6" height="5"/><rect x="14" y="29" width="6" height="10"/></g></svg><div><div class="brand-name">Registre du Syndic</div><div class="brand-sub">Gestion de copropriété</div></div></div>`;
   if(!SB) return `<div class="auth-card">${brand}<h2>Configuration requise</h2><p class="muted">Renseignez l'adresse et la clé publique de votre projet Supabase dans le fichier <code>config.js</code>, puis rechargez la page.</p></div>`;
   if(!A.ready) return `<div class="auth-card">${brand}<p class="muted">Chargement…</p></div>`;
-  const msg=A.msg?`<div class="auth-msg ${A.msgOk?'ok':'bad'}" role="status">${esc(A.msg)}</div>`:'';
-  if(A.recovery) return `<form class="auth-card" id="f-auth" data-mode="recovery">${brand}<h2>Nouveau mot de passe</h2>
-    <div class="field"><label for="au-pw">Nouveau mot de passe</label><input class="input" id="au-pw" name="password" type="password" minlength="8" autocomplete="new-password" required></div>${msg}
-    <button class="btn primary" ${A.busy?'disabled':''}>Enregistrer le mot de passe</button></form>`;
-  const t=A.tab;
-  return `<form class="auth-card" id="f-auth" data-mode="${t}">${brand}
-    ${t==='forgot'?'<h2>Mot de passe oublié</h2><p class="muted" style="margin:0">Indiquez votre e-mail : vous recevrez un lien pour choisir un nouveau mot de passe.</p>':`<div class="seg auth-tabs" role="group"><button type="button" data-act="auth-tab" data-t="login" aria-pressed="${t==='login'}">Se connecter</button><button type="button" data-act="auth-tab" data-t="signup" aria-pressed="${t==='signup'}">Créer un compte</button></div>`}
-    <div class="field"><label for="au-email">E-mail</label><input class="input" id="au-email" name="email" type="email" autocomplete="email" required value="${esc(A.lastEmail||'')}"></div>
-    ${t!=='forgot'?`<div class="field"><label for="au-pw">Mot de passe</label><input class="input" id="au-pw" name="password" type="password" minlength="${t==='signup'?8:1}" autocomplete="${t==='signup'?'new-password':'current-password'}" required>${t==='signup'?'<span class="muted" style="font-size:.76rem">8 caractères minimum.</span>':''}</div>`:''}
+  const msg=A.msg?`<div class="auth-msg bad" role="status">${esc(A.msg)}</div>`:'';
+  return `<form class="auth-card" id="f-code">${brand}
+    <h2>${A.adding?'Ajouter un code':'Code d\'accès'}</h2>
+    <p class="muted" style="margin:0">Saisissez le code de l'immeuble remis par le syndic. Il est mémorisé sur cet appareil : vous n'aurez pas à le retaper.</p>
+    <div class="field"><label for="ac-code">Code</label><input class="input mono" id="ac-code" name="code" autocomplete="off" autocapitalize="characters" spellcheck="false" required minlength="6" value="${esc(A.lastCode||'')}"></div>
     ${msg}
-    <button class="btn primary" ${A.busy?'disabled':''}>${t==='login'?'Se connecter':t==='signup'?'Créer mon compte':'Envoyer le lien'}</button>
-    ${t==='login'?'<button type="button" class="link" data-act="auth-tab" data-t="forgot">Mot de passe oublié ?</button>':t==='forgot'?'<button type="button" class="link" data-act="auth-tab" data-t="login">Retour à la connexion</button>':'<p class="muted" style="margin:0;font-size:.8rem">Invité par un syndic ? Créez votre compte avec l\'e-mail auquel l\'invitation a été faite.</p>'}
+    <button class="btn primary" ${A.busy?'disabled':''}>${A.busy?'Vérification…':'Ouvrir'}</button>
+    ${A.adding&&A.imms.length?'<button type="button" class="link" data-act="code-cancel">Annuler</button>':''}
   </form>`;
 }
 document.addEventListener('submit',async e=>{
-  const f=e.target; if(f.id!=='f-auth') return; e.preventDefault(); if(A.busy) return;
-  const mode=f.dataset.mode, email=(f.elements.email?f.elements.email.value.trim():''), pw=f.elements.password?f.elements.password.value:'';
-  A.lastEmail=email||A.lastEmail; A.busy=true; A.msg=''; paintAuth(true);
+  const f=e.target; if(f.id!=='f-code') return; e.preventDefault(); if(A.busy) return;
+  const code=f.elements.code.value.trim(); A.lastCode=code; A.busy=true; A.msg=''; paintAuth(true);
   try{
-    if(mode==='login'){ const {error}=await SB.auth.signInWithPassword({email,password:pw}); if(error) throw error; }
-    else if(mode==='signup'){ const {data,error}=await SB.auth.signUp({email,password:pw,options:{emailRedirectTo:siteUrl()}}); if(error) throw error;
-      if(!data.session){ A.msg='Compte créé. Ouvrez le lien de confirmation reçu par e-mail, puis connectez-vous.'; A.msgOk=true; A.tab='login'; } }
-    else if(mode==='forgot'){ const {error}=await SB.auth.resetPasswordForEmail(email,{redirectTo:siteUrl()}); if(error) throw error; A.msg='Si un compte existe pour cet e-mail, un lien vient de vous être envoyé.'; A.msgOk=true; }
-    else if(mode==='recovery'){ const {error}=await SB.auth.updateUser({password:pw}); if(error) throw error; A.recovery=false; toast('Mot de passe modifié'); }
-  }catch(err){ A.msg=authErr(err); A.msgOk=false; }
+    const r=await openCode(code);
+    if(r.erreur==='bloque') A.msg="Trop d'essais de codes incorrects. Réessayez dans 15 minutes.";
+    else if(r.erreur) A.msg='Code incorrect. Vérifiez les majuscules, les tirets et les chiffres.';
+    else { A.adding=false; A.lastCode=''; const first=(r.immeubles||[])[0]; await Store.open(first?first.id:IMM); if(r.role==='admin'&&!first) S.mode='none'; toast(r.role==='admin'?'Accès administrateur ouvert':'Immeuble ouvert'); }
+  }catch(err){ A.msg="Impossible de vérifier le code : "+((err&&err.message)||'erreur réseau'); }
   A.busy=false; paintAuth(true); schedule();
 });
 let authKey='';
 function paintAuth(force){
-  const el=document.getElementById('auth'); const k=[!!SB,A.ready,A.recovery,A.tab,A.msg,A.busy].join('|');
-  if(force||k!==authKey){ authKey=k; el.innerHTML=authScreen(); const f=el.querySelector('input'); if(f&&!A.busy) f.focus(); }
+  const el=document.getElementById('auth'); const k=[!!SB,A.ready,A.adding,A.msg,A.busy].join('|');
+  if(force||k!==authKey){ authKey=k; el.innerHTML=codeScreen(); const f=el.querySelector('input'); if(f&&!A.busy) f.focus(); }
 }
+function needCode(){ return !SB||!A.ready||A.adding||(!A.keys.length&&S.mode!=='error'); }
 
 /* ================= calculs ================= */
 const etById = id => S.etages.find(e=>e.id===id);
@@ -568,7 +562,7 @@ function ready(){ return S.mode==='db'; }
 
 function render(){
   const appEl=document.querySelector('.app'), authEl=document.getElementById('auth');
-  if(!SB||!A.ready||A.recovery||!A.user){ appEl.hidden=true; authEl.hidden=false; paintAuth(); return; }
+  if(needCode()){ appEl.hidden=true; authEl.hidden=false; paintAuth(); return; }
   appEl.hidden=false; authEl.hidden=true; authKey='';
   document.getElementById('immbar').innerHTML = immBar();
   document.getElementById('nav').innerHTML = VIEWS.map(([k,l])=>`<button type="button" data-act="nav" data-v="${k}" ${S.view===k?'aria-current="page"':''}>${ICON[k]}<span class="lbl">${l}</span></button>`).join('');
@@ -578,7 +572,8 @@ function render(){
   document.getElementById('mode-pill').textContent = A.role ? 'Votre accès : '+ROLE_LBL[A.role] : '';
   const v=document.getElementById('view');
   if(S.mode==='none'){ v.innerHTML=firstImmeuble(); return; }
-  if(S.mode==='error'){ v.innerHTML=`<section class="panel"><div class="empty"><h3>Impossible de charger les données</h3><span>${esc(A.err)}</span><button class="btn primary" data-act="retry">Réessayer</button></div></section>`; return; }
+  if(S.mode==='code'){ v.innerHTML='<section class="panel"><div class="empty"><h3>Aucun immeuble ouvert</h3><span>Saisissez un code d’accès pour ouvrir un immeuble.</span><button class="btn primary" data-act="add-code">Saisir un code</button></div></section>'; return; }
+  if(S.mode==='error'){ v.innerHTML=`<section class="panel"><div class="empty"><h3>Impossible de charger les données</h3><span>${esc(A.err)}</span><button class="btn primary" data-act="retry">Réessayer</button><button class="btn" data-act="add-code">Saisir un autre code</button></div></section>`; return; }
   if(!ready()){ v.innerHTML='<div class="empty"><h3>Chargement du registre…</h3></div>'; return; }
   const keep = {x:window.scrollX,y:window.scrollY};
   const ae=document.activeElement; const aeId = ae && v.contains(ae) ? ae.id : null; const selS=ae&&ae.selectionStart;
@@ -592,43 +587,56 @@ function wbtn(act,label,extra='',cls='btn'){ return `<button type="button" class
 function exBadge(o){ return o&&o.exemple?' <span class="ex-badge">exemple</span>':''; }
 function banner(){
   let h='';
-  if(A.role==='lecteur') h+=`<div class="banner"><span>Vous consultez cet immeuble en <strong>lecture seule</strong>. Les états imprimables et les exports restent disponibles.</span></div>`;
+  if(A.role==='lecture') h+=`<div class="banner"><span>Votre code donne un accès en <strong>lecture seule</strong> à cet immeuble. Les états imprimables et les exports restent disponibles.</span></div>`;
   if([...S.etages,...S.apparts,...S.paiements,...S.depenses].some(x=>x.exemple)) h+=`<div class="banner"><span>Cet immeuble contient des <strong>données d'exemple</strong> pour vous montrer le fonctionnement. Supprimez-les quand vous saisissez vos vraies données.</span>${wbtn('clear-examples','Supprimer les exemples','','btn sm')}</div>`;
   return h;
 }
 
 
 function immBar(){
-  const opts=A.imms.map(i=>`<option value="${i.id}" ${i.id===IMM?'selected':''}>${esc(i.nom||'Immeuble sans nom')}${i.role!=='owner'?' ('+(i.role==='lecteur'?'lecture':'gestion')+')':''}</option>`).join('');
+  const isAdmin=A.keys.some(k=>k.role==='admin');
+  const opts=A.imms.map(i=>`<option value="${i.id}" ${i.id===IMM?'selected':''}>${esc(i.nom||'Immeuble sans nom')}${i.role==='lecture'?' (lecture)':''}</option>`).join('');
   return `<div class="immbar">${A.imms.length?`<label class="eyebrow" for="imm-switch">Immeuble</label><select class="input" id="imm-switch">${opts}</select>`:''}
-    <button class="btn sm" data-act="new-imm">${ICON.plus} Nouvel immeuble</button>
-    <div class="who"><span title="${esc(A.user.email)}">${esc(A.user.email)}</span><button class="btn sm ghost" data-act="logout">Se déconnecter</button></div></div>`;
+    ${A.role?`<span class="chip neutral">${ROLE_LBL[A.role]}</span>`:''}
+    ${isAdmin?`<button class="btn sm" data-act="new-imm">${ICON.plus} Nouvel immeuble</button>`:''}
+    <div class="who"><button class="btn sm ghost" data-act="add-code">Ajouter un code</button><button class="btn sm ghost" data-act="forget-codes">Fermer sur cet appareil</button></div></div>`;
 }
+function codeFields(prefix){
+  return `<div class="form-grid">
+    <div class="field"><label for="${prefix}-g">Code de gestion (saisie)</label><input class="input mono" id="${prefix}-g" name="gestion" minlength="6" autocomplete="off" spellcheck="false" placeholder="6 caractères minimum" required></div>
+    <div class="field"><label for="${prefix}-l">Code de lecture seule (facultatif)</label><input class="input mono" id="${prefix}-l" name="lecture" minlength="6" autocomplete="off" spellcheck="false" placeholder="Pour le conseil syndical, les copropriétaires"></div>
+  </div><button type="button" class="btn sm" data-act="gen-codes" data-p="${prefix}">Proposer des codes</button>`;
+}
+function genCode(){ const a='ABCDEFGHJKMNPQRSTUVWXYZ23456789'; const r=crypto.getRandomValues(new Uint32Array(8)); const s=[...r].map(x=>a[x%a.length]).join(''); return s.slice(0,4)+'-'+s.slice(4); }
 function firstImmeuble(){
-  return `<div class="topbar"><div><div class="eyebrow">Bienvenue</div><h1>Créez votre premier immeuble</h1></div></div>
-  <section class="panel"><form class="panel-b stack" id="f-first" style="max-width:520px">
-    <p style="margin:0">Donnez un nom à l'immeuble ou à la résidence que vous gérez. Vous pourrez ensuite générer les étages et les appartements, puis ajouter d'autres immeubles.</p>
+  return `<div class="topbar"><div><div class="eyebrow">Administrateur</div><h1>Créez votre premier immeuble</h1></div></div>
+  <section class="panel"><form class="panel-b stack" id="f-first" style="max-width:640px">
+    <p style="margin:0">Chaque immeuble a son propre <strong>code de gestion</strong>, pour saisir les paiements et les dépenses, et, si vous le souhaitez, un <strong>code de lecture seule</strong> à remettre au conseil syndical ou aux copropriétaires.</p>
     <div class="field"><label for="fi-nom">Nom de l'immeuble</label><input class="input" id="fi-nom" name="nom" required placeholder="ex. Résidence Al Amal – Immeuble B"></div>
+    ${codeFields('fi')}
     <div><button class="btn primary">Créer l'immeuble</button></div>
-    <p class="muted" style="margin:0;font-size:.82rem">Vous avez été invité par un syndic ? Demandez-lui de vérifier l'e-mail utilisé pour l'invitation : il doit être identique à celui de votre compte (${esc(A.user.email)}).</p>
   </form></section>`;
 }
 function formNewImm(){
-  openModal(`${sheetHead('Nouvel immeuble','Immeubles')}<form id="f-newimm"><div class="sheet-b"><div class="field"><label for="ni-nom">Nom de l'immeuble</label><input class="input" id="ni-nom" name="nom" required placeholder="ex. Résidence Les Orangers – Immeuble C"></div><p class="muted" style="margin:0;font-size:.84rem">Chaque immeuble a ses propres étages, lots, paiements, dépenses et accès.</p></div><div class="sheet-f"><button type="button" class="btn" data-act="close">Annuler</button><button class="btn primary">Créer</button></div></form>`);
-  document.getElementById('f-newimm').onsubmit=async ev=>{ev.preventDefault(); const nom=ev.target.elements.nom.value.trim(); try{ await Store.createImmeuble(nom); closeModal(); S.view='immeuble'; toast('Immeuble créé'); schedule(); }catch(e){ toast("La création a échoué : "+(e.message||'erreur')); } };
+  openModal(`${sheetHead('Nouvel immeuble','Administrateur')}<form id="f-newimm"><div class="sheet-b"><div class="field"><label for="ni-nom">Nom de l'immeuble</label><input class="input" id="ni-nom" name="nom" required placeholder="ex. Résidence Les Orangers – Immeuble C"></div>${codeFields('ni')}<p class="muted" style="margin:0;font-size:.84rem">Notez ces codes avant de valider : ils sont enregistrés chiffrés et ne pourront plus être affichés, seulement remplacés.</p></div><div class="sheet-f"><button type="button" class="btn" data-act="close">Annuler</button><button class="btn primary">Créer</button></div></form>`,true);
 }
 function sectionAcces(){
-  if(A.role!=='owner') return `<section class="panel"><div class="panel-h"><h2>Votre accès</h2></div><div class="panel-b stack"><p style="margin:0">Vous accédez à cet immeuble en tant que <strong>${esc(ROLE_LBL[A.role]||'')}</strong>.</p><div><button class="btn danger" data-act="leave-imm">Quitter cet immeuble</button></div></div></section>`;
-  const rows=[...A.membres.map(m=>({k:'m',email:m.email,role:m.role,id:m.user_id})),...A.invitations.map(i=>({k:'i',email:i.email,role:i.role}))];
-  return `<section class="panel"><div class="panel-h"><h2>Accès à cet immeuble</h2></div><div class="panel-b stack">
-    <p style="margin:0;max-width:70ch">Invitez le conseil syndical ou des copropriétaires. La personne crée son compte sur ce site <strong>avec l'e-mail invité</strong>, et l'immeuble apparaît automatiquement.</p>
+  const isAdmin=A.role==='admin';
+  if(A.role==='lecture') return `<section class="panel"><div class="panel-h"><h2>Votre accès</h2></div><div class="panel-b">Votre code donne un accès en <strong>lecture seule</strong> à cet immeuble. Pour saisir des paiements, demandez le code de gestion au syndic.</div></section>`;
+  return `<section class="panel"><div class="panel-h"><h2>Codes d'accès de cet immeuble</h2></div><div class="panel-b stack">
+    <p style="margin:0;max-width:72ch">Remettez le <strong>code de gestion</strong> aux personnes qui saisissent les opérations, et le <strong>code de lecture seule</strong> à celles qui consultent. Les codes sont enregistrés chiffrés : on ne peut pas les réafficher, seulement les remplacer. Un code remplacé cesse de fonctionner sur tous les appareils.</p>
+    <dl class="dl"><dt>Code de gestion</dt><dd>Actif</dd><dt>Code de lecture seule</dt><dd>${S.hasLecture?'Actif':'Aucun'}</dd></dl>
     <div class="copybox"><code id="site-url">${esc(siteUrl())}</code><button class="btn sm" data-act="copy-url">Copier le lien du site</button></div>
-    <form id="f-invite" class="filters"><input class="input search" id="inv-email" name="email" type="email" required placeholder="email@exemple.com"><select class="input" id="inv-role" name="role"><option value="lecteur">Lecture seule</option><option value="gestionnaire">Gestionnaire (peut saisir)</option></select><button class="btn primary">Inviter</button></form>
-    ${!A.accesLoaded?'<p class="muted" style="margin:0">Chargement des accès…</p>':rows.length?`<div class="tbl-wrap"><table class="tbl"><thead><tr><th>E-mail</th><th>Rôle</th><th>Statut</th><th></th></tr></thead><tbody>
-    ${rows.map(r=>`<tr><td>${esc(r.email)}</td><td>${r.role==='lecteur'?'Lecture seule':'Gestionnaire'}</td><td>${r.k==='m'?'<span class="chip ok">Actif</span>':'<span class="chip warn">Invitation en attente</span>'}</td><td class="r"><button class="btn sm ghost danger" data-act="${r.k==='m'?'del-membre':'del-invit'}" data-id="${esc(r.k==='m'?r.id:r.email)}">Retirer</button></td></tr>`).join('')}</tbody></table></div>`:'<p class="muted" style="margin:0">Personne d\'autre n\'a accès à cet immeuble pour l\'instant.</p>'}
+    <form id="f-codes" class="stack"><div class="form-grid">
+      <div class="field"><label for="co-g">Nouveau code de gestion</label><input class="input mono" id="co-g" name="gestion" minlength="6" autocomplete="off" spellcheck="false" placeholder="Laisser vide pour ne pas changer"></div>
+      <div class="field"><label for="co-l">Nouveau code de lecture seule</label><input class="input mono" id="co-l" name="lecture" minlength="6" autocomplete="off" spellcheck="false" placeholder="Laisser vide pour ne pas changer"></div>
+    </div><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button type="button" class="btn sm" data-act="gen-codes" data-p="co">Proposer des codes</button><button class="btn primary">Enregistrer les codes</button>${S.hasLecture?'<button type="button" class="btn danger" data-act="del-lecture">Désactiver le code de lecture</button>':''}</div></form>
   </div></section>
-  <section class="panel"><div class="panel-h"><h2>Supprimer l'immeuble</h2><button class="btn danger" data-act="del-imm">${ICON.trash} Supprimer</button></div><div class="panel-b muted">Supprime définitivement l'immeuble avec ses étages, lots, paiements et dépenses, ainsi que les accès partagés.</div></section>`;
+  ${isAdmin?`<section class="panel"><div class="panel-h"><h2>Code administrateur</h2></div><div class="panel-b stack"><p style="margin:0">Le code administrateur ouvre tous les immeubles et permet d'en créer. Gardez-le pour vous.</p>
+    <form id="f-admin" class="filters"><input class="input mono search" id="ad-new" name="nouveau" minlength="8" autocomplete="off" spellcheck="false" required placeholder="Nouveau code administrateur (8 caractères minimum)"><button class="btn primary">Changer le code administrateur</button></form></div></section>
+  <section class="panel"><div class="panel-h"><h2>Supprimer l'immeuble</h2><button class="btn danger" data-act="del-imm">${ICON.trash} Supprimer</button></div><div class="panel-b muted">Supprime définitivement l'immeuble avec ses étages, lots, paiements et dépenses.</div></section>`:''}`;
 }
+function siteUrl(){ return location.origin+location.pathname; }
 
 /* ---------- Tableau de bord ---------- */
 function vTableau(){
@@ -1215,17 +1223,17 @@ document.addEventListener('click',async e=>{
   const b=e.target.closest('[data-act]'); if(!b||b.disabled) return;
   const act=b.dataset.act, id=b.dataset.id;
   switch(act){
-    case 'nav': S.view=b.dataset.v; try{localStorage.setItem('syndic-view',S.view)}catch(x){} closeModal(); if(S.view==='parametres'&&!A.accesLoaded) loadAcces(); render(); window.scrollTo(0,0); break;
-    case 'auth-tab': A.tab=b.dataset.t; A.msg=''; paintAuth(true); break;
-    case 'logout': await SB.auth.signOut(); A.tab='login'; A.msg=''; break;
-    case 'retry': afterLogin(); break;
+    case 'nav': S.view=b.dataset.v; try{localStorage.setItem('syndic-view',S.view)}catch(x){} closeModal(); render(); window.scrollTo(0,0); break;
+    case 'add-code': A.adding=true; A.msg=''; A.lastCode=''; closeModal(); render(); break;
+    case 'code-cancel': A.adding=false; A.msg=''; render(); break;
+    case 'forget-codes': confirmBox('Fermer sur cet appareil','Les codes mémorisés sur cet appareil seront oubliés. Il faudra les saisir de nouveau pour rouvrir les immeubles.',async()=>{ storeCodes([]); try{localStorage.removeItem('syndic-imm')}catch(x){} A.keys=[]; A.imms=[]; IMM=null; A.role=null; S.mode='code'; schedule(); },'Fermer'); break;
+    case 'retry': S.mode='loading'; appInit(); break;
     case 'new-imm': formNewImm(); break;
+    case 'gen-codes': { const p=b.dataset.p; const g=document.getElementById(p+'-g'), l=document.getElementById(p+'-l'); if(g) g.value=genCode(); if(l) l.value=genCode(); break; }
     case 'print': { const st=document.getElementById('page-size')||document.head.appendChild(Object.assign(document.createElement('style'),{id:'page-size'})); st.textContent='@page{size:A4 '+(S.et.type==='global'?'landscape':'portrait')+';margin:12mm}'; window.print(); break; }
     case 'copy-url': { const u=siteUrl(); try{ await navigator.clipboard.writeText(u); toast('Lien copié'); }catch(x){ const r=document.createRange(); r.selectNodeContents(document.getElementById('site-url')); const sl=getSelection(); sl.removeAllRanges(); sl.addRange(r); toast('Lien sélectionné : copiez-le avec Ctrl+C'); } break; }
-    case 'del-membre': { const m=A.membres.find(x=>x.user_id===id); confirmBox('Retirer l\'accès',`Retirer l'accès de ${esc(m?m.email:'')} à cet immeuble ?`,async()=>{ const {error}=await SB.from('syndic_membres').delete().eq('immeuble_id',IMM).eq('user_id',id); if(error) toast('Échec : '+error.message); else { toast('Accès retiré'); await loadAcces(); } },'Retirer'); break; }
-    case 'del-invit': { const {error}=await SB.from('syndic_invitations').delete().eq('immeuble_id',IMM).eq('email',id); if(error) toast('Échec : '+error.message); else { toast('Invitation annulée'); loadAcces(); } break; }
-    case 'leave-imm': confirmBox('Quitter l\'immeuble','Vous ne verrez plus cet immeuble. Le syndic devra vous inviter de nouveau pour y revenir.',async()=>{ const {error}=await SB.from('syndic_membres').delete().eq('immeuble_id',IMM).eq('user_id',A.user.id); if(error) toast('Échec : '+error.message); else { try{localStorage.removeItem('syndic-imm')}catch(x){} await Store.loadImmeubles(); toast('Vous avez quitté l\'immeuble'); } },'Quitter'); break;
-    case 'del-imm': { const nom=S.config.nom||'cet immeuble'; confirmBox('Supprimer l\'immeuble',`Supprimer définitivement <strong>${esc(nom)}</strong> avec ses ${S.apparts.length} lots, ${S.paiements.length} paiements et ${S.depenses.length} dépenses ? Cette action est irréversible.`,async()=>{ const {data,error}=await SB.from('syndic_immeubles').delete().eq('id',IMM).select('id'); if(error||!data||!data.length) toast('Suppression impossible'+(error?' : '+error.message:'')); else { try{localStorage.removeItem('syndic-imm')}catch(x){} await Store.loadImmeubles(); S.view='tableau'; toast('Immeuble supprimé'); } },'Supprimer définitivement'); break; }
+    case 'del-lecture': confirmBox('Désactiver le code de lecture','Les personnes qui utilisent le code de lecture seule n’auront plus accès à cet immeuble.',async()=>{ try{ const r=await rpc('syndic_codes_modifier',{p_code:A.code,p_imm:IMM,p_gestion:'',p_lecture:''}); if(!r) throw denied(); toast('Code de lecture désactivé'); await Store.reload(); }catch(err){ toast('Échec : '+(err.message||'erreur')); } },'Désactiver'); break;
+    case 'del-imm': { const nom=S.config.nom||'cet immeuble'; confirmBox('Supprimer l’immeuble',`Supprimer définitivement <strong>${esc(nom)}</strong> avec ses ${S.apparts.length} lots, ${S.paiements.length} paiements et ${S.depenses.length} dépenses ? Cette action est irréversible.`,async()=>{ try{ const adm=A.keys.find(k=>k.role==='admin'); const r=await rpc('syndic_imm_supprimer',{p_admin:adm.code,p_imm:IMM}); if(!r) throw denied(); A.keys.forEach(k=>k.imms=k.imms.filter(i=>i.id!==IMM)); mergeKeys(); try{localStorage.removeItem('syndic-imm')}catch(x){} S.view='tableau'; await Store.open((A.imms[0]||{}).id||null); toast('Immeuble supprimé'); }catch(err){ toast('Suppression impossible : '+(err.message||'erreur')); } },'Supprimer définitivement'); break; }
     case 'year': S.year+=+b.dataset.d; render(); break;
     case 'imm-mode': S.immMode=b.dataset.m; render(); break;
     case 'close': closeModal(); break;
@@ -1276,19 +1284,36 @@ document.addEventListener('change',e=>{
 });
 document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&!M.hidden) closeModal(); });
 document.addEventListener('submit',async e=>{
-  const f=e.target;
-  if(f.id==='f-first'){ e.preventDefault(); const nom=f.elements.nom.value.trim(); f.querySelector('button').disabled=true; try{ await Store.createImmeuble(nom); S.view='immeuble'; toast('Immeuble créé'); }catch(err){ toast('La création a échoué : '+(err.message||'erreur')); f.querySelector('button').disabled=false; } }
-  if(f.id==='f-invite'){ e.preventDefault(); const email=f.elements.email.value.trim().toLowerCase(), role=f.elements.role.value;
-    if(email===(A.user.email||'').toLowerCase()){ toast('C\'est votre propre adresse.'); return; }
-    const {error}=await SB.from('syndic_invitations').upsert({immeuble_id:IMM,email,role});
-    if(error) toast('Invitation impossible : '+error.message); else { toast('Invitation enregistrée. Envoyez le lien du site à '+email); await loadAcces(); } }
+  const f=e.target; const btn=f.querySelector('button.primary');
+  const val=n=>f.elements[n]?f.elements[n].value.trim():'';
+  if(f.id==='f-first'||f.id==='f-newimm'){ e.preventDefault(); const g=val('gestion'), l=val('lecture');
+    if(l&&l===g){ toast('Les deux codes doivent être différents.'); return; }
+    if(btn) btn.disabled=true;
+    try{ await Store.createImmeuble(val('nom'),g,l); closeModal(); S.view='immeuble'; toast('Immeuble créé. Notez bien ses codes.'); schedule(); }
+    catch(err){ toast(err.message||'La création a échoué.'); if(btn) btn.disabled=false; } }
+  if(f.id==='f-codes'){ e.preventDefault(); const g=val('gestion'), l=val('lecture');
+    if(!g&&!l){ toast('Saisissez au moins un nouveau code.'); return; }
+    if(g&&l&&g===l){ toast('Les deux codes doivent être différents.'); return; }
+    if(btn) btn.disabled=true;
+    try{ const r=await rpc('syndic_codes_modifier',{p_code:A.code,p_imm:IMM,p_gestion:g,p_lecture:l||null});
+      if(!r) throw new Error('code déjà utilisé par un autre immeuble ou trop court (6 caractères minimum)');
+      if(g&&A.role==='gestion'){ const old=A.code; storeCodes([...savedCodes().filter(c=>c!==old),g]); A.keys.forEach(k=>{ if(k.code===old) k.code=g; }); mergeKeys(); A.code=g; }
+      toast('Codes enregistrés. Communiquez les nouveaux codes aux personnes concernées.'); await Store.reload(); }
+    catch(err){ toast('Codes non enregistrés : '+(err.message||'erreur')); if(btn) btn.disabled=false; } }
+  if(f.id==='f-admin'){ e.preventDefault(); const n=val('nouveau'); const adm=A.keys.find(k=>k.role==='admin'); if(!adm) return;
+    if(btn) btn.disabled=true;
+    try{ const ok=await rpc('syndic_admin_modifier',{p_ancien:adm.code,p_nouveau:n}); if(!ok) throw new Error('code trop court (8 caractères minimum) ou déjà utilisé');
+      storeCodes([...savedCodes().filter(c=>c!==adm.code),n]); A.keys.forEach(k=>{ if(k.code===adm.code) k.code=n; }); mergeKeys(); A.code=(A.imms.find(i=>i.id===IMM)||{}).code||A.code;
+      toast('Code administrateur changé. Notez-le bien.'); f.reset(); }
+    catch(err){ toast('Échec : '+(err.message||'erreur')); }
+    if(btn) btn.disabled=false; }
 });
-document.addEventListener('visibilitychange',()=>{ if(!document.hidden&&A.user&&IMM&&S.mode==='db'&&M.hidden) Store.reload().catch(()=>{}); });
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden&&IMM&&S.mode==='db'&&M.hidden) Store.reload().catch(()=>{}); });
 
 let tt=0; function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.hidden=false; clearTimeout(tt); tt=setTimeout(()=>t.hidden=true,3200); }
 
 render();
-authInit();
+appInit();
 })();
 </script>
 </body>

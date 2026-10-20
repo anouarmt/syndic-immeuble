@@ -3,9 +3,9 @@
 Application web de gestion de syndic d'immeuble (copropriété) : étages, appartements et autres lots, cotisations mensuelles des copropriétaires, dépenses de l'immeuble, impayés, reçus, états imprimables (relevé par appartement et état global) et exports CSV.
 
 - Plusieurs immeubles par compte, avec un sélecteur d'immeuble.
-- Connexion par e-mail et mot de passe.
-- Partage par immeuble : **gestionnaire** (peut saisir) ou **lecture seule** (conseil syndical, copropriétaires).
-- Données stockées dans Supabase (tables `syndic_…`), protégées par des règles d'accès (RLS).
+- Accès par **code**, sans compte : un code administrateur (tous les immeubles), et pour chaque immeuble un code de gestion (saisie) et un code de lecture seule facultatif.
+- Les codes sont mémorisés sur l'appareil après la première saisie.
+- Données stockées dans Supabase (tables `syndic_…`) : aucun accès direct aux tables, tout passe par des fonctions qui vérifient le code ; codes chiffrés ; blocage après 30 codes faux en 15 minutes.
 
 ## Fichiers
 
@@ -18,7 +18,3 @@ Application web de gestion de syndic d'immeuble (copropriété) : étages, appar
 ## Mise en ligne
 
 Le site est publié par **GitHub Pages** depuis la branche `main` : chaque modification envoyée sur `main` met le site à jour automatiquement en une à deux minutes.
-
-## Réglage Supabase à faire une fois
-
-Dans Supabase : **Authentication → URL Configuration**, ajoutez l'adresse du site dans **Redirect URLs** (et dans **Site URL** si ce projet ne sert qu'à cette application). Sans ce réglage, les liens de confirmation d'e-mail et de réinitialisation de mot de passe renvoient vers une mauvaise adresse.
